@@ -2,8 +2,11 @@
 # pullable) used as the driver-toolkit base. CentOS Stream 9 keeps the
 # x86-64-v2 baseline. driver-toolkit needs kernel-rt (RT), kabi-dw and
 # kernel-devel-matched (AppStream) and some build deps from CRB.
+# diffutils: the upstream Dockerfile diffs kernel vs kernel-rt Source RPMs and
+# expects it to be present in the base like it is in base-rhel9.
 ARG BASE_IMAGE=quay.io/centos/centos:stream9
 FROM ${BASE_IMAGE}
 RUN dnf -y install 'dnf-command(config-manager)' \
     && dnf config-manager --set-enabled crb rt nfv \
+    && dnf -y install diffutils \
     && dnf clean all && rm -rf /var/cache/dnf/*

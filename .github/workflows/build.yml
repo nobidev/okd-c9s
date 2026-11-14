@@ -30,7 +30,7 @@ jobs:
   check:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
       - name: Install tools
@@ -48,7 +48,7 @@ jobs:
       SCOS_USE_LOCKFILE: ${{ inputs.scos_use_lockfile || '1' }}
       BUILDER_IMAGE: quay.io/podman/stable:v5.8.9
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
 
@@ -68,7 +68,7 @@ jobs:
           echo Y | sudo tee /sys/module/overlay/parameters/redirect_dir
 
       - name: Restore download cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /mnt/build/cache
           key: dl-${{ hashFiles('versions.env', 'rpms/okd-el9.lock') }}
