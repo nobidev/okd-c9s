@@ -14,10 +14,18 @@ for component in "${REPLACED_COMPONENTS[@]}"; do
     mappings+=("${component}=${ref}")
 done
 
+# The release image is a layer on top of cluster-version-operator. `oc` finds
+# that image through the upstream release's base-image-digest label, which
+# fails when the upstream release is a manifest list (4.20): the label holds
+# the per-arch digest while the payload references manifest-list digests.
+# Name the base explicitly; it is the image `oc` would otherwise pick.
+base_image="$(upstream_image_for cluster-version-operator)"
+
 log "creating ${RELEASE_IMAGE} (${RELEASE_NAME}) from ${UPSTREAM_RELEASE_IMAGE}"
-printf '  %s\n' "${mappings[@]}" >&2
+printf '  %s\n' "base: ${base_image}" "${mappings[@]}" >&2
 oc_cmd adm release new \
     --from-release="${UPSTREAM_RELEASE_IMAGE}" \
+    --to-image-base="${base_image}" \
     --to-image="${RELEASE_IMAGE}" \
     --name="${RELEASE_NAME}" \
     "${mappings[@]}"
