@@ -56,10 +56,7 @@ versions.env              every version / image / URL in one place
 Requirements: Linux x86_64, podman ≥ 5 running as root (the SCOS base build
 needs `--cap-add=all --device /dev/fuse`), `make`, `git`, `python3`,
 `createrepo_c` (optional, a container is used otherwise),
-`qemu-user-static` (for the execution test), ~60 GB of disk, and the
-overlayfs `redirect_dir` feature enabled
-(`echo Y > /sys/module/overlay/parameters/redirect_dir`; the build tries to
-enable it itself).
+`qemu-user-static` (for the execution test), ~60 GB of disk.
 The build host itself may be an x86-64-v2 machine.
 
 ```bash

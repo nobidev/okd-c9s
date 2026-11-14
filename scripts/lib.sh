@@ -116,6 +116,8 @@ prepare_src() {
 # overlayfs only allows that with redirect_dir enabled; otherwise rename(2)
 # fails with EXDEV and libsemanage aborts. containers/storage detects the
 # setting and switches to its naive layer diff, so enabling it is safe.
+# patches/os also copies the SELinux store into the build layer, which is
+# what actually fixes libsemanage; this is a best-effort extra.
 ensure_overlay_redirect_dir() {
     local param=/sys/module/overlay/parameters/redirect_dir
     [[ -f "${param}" ]] || return 0
@@ -124,7 +126,7 @@ ensure_overlay_redirect_dir() {
     esac
     log "enabling overlayfs redirect_dir (${param})"
     if ! echo Y > "${param}" 2>/dev/null; then
-        die "overlayfs redirect_dir is disabled and cannot be enabled from here; run as root on the host: echo Y > ${param}"
+        log "warning: cannot enable overlayfs redirect_dir; relying on the SELinux store copy in patches/os"
     fi
 }
 

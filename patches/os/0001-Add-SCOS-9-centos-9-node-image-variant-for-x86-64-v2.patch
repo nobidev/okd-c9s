@@ -1,4 +1,4 @@
-From 0486980a790faa28aeff1ab2f5e1c6ad921e3efe Mon Sep 17 00:00:00 2001
+From c5b057cf5a997925763dfdfb29c8ceaf0387fb9f Mon Sep 17 00:00:00 2001
 From: okd-c9s <okd-c9s@localhost>
 Date: Sat, 14 Nov 2026 01:07:10 +0000
 Subject: [PATCH] Add SCOS 9 (centos-9) node image variant for x86-64-v2
@@ -13,13 +13,15 @@ x86-64-v3. Re-add a CentOS Stream 9 variant:
 - packages-openshift.yaml: centos-9 repo set; install kubelet image
   credential provider RPMs only on other variants
 - build-node-image.sh: skip the ART okd.repo hack when no ART repo is
-  present and overlay /run/src/extra-rootfs if provided
+  present, overlay /run/src/extra-rootfs if provided, and copy the
+  SELinux policy store into the current layer so libsemanage's atomic
+  directory renames do not cross overlay layers
 ---
  build-args-4.22-c9s.conf | 11 ++++++
- build-node-image.sh      | 10 ++++-
+ build-node-image.sh      | 22 ++++++++++-
  c9s.repo                 | 84 ++++++++++++++++++++++++++++++++++++++++
  packages-openshift.yaml  | 29 +++++++++++---
- 4 files changed, 127 insertions(+), 7 deletions(-)
+ 4 files changed, 139 insertions(+), 7 deletions(-)
  create mode 100644 build-args-4.22-c9s.conf
  create mode 100644 c9s.repo
 
@@ -41,7 +43,7 @@ index 0000000..35dc435
 +
 +# SCOS/OKD: no labels.json or OCI labels for name/cpe
 diff --git a/build-node-image.sh b/build-node-image.sh
-index 00a6a61..a572763 100755
+index 00a6a61..02c7db4 100755
 --- a/build-node-image.sh
 +++ b/build-node-image.sh
 @@ -21,7 +21,9 @@ source /etc/os-release
@@ -55,7 +57,23 @@ index 00a6a61..a572763 100755
      # this says: "if the line starts with [.*], turn off printing. if the line starts with [our-repo], turn it on."
      awk "/\[.*\]/{p=0} /\[rhel-9.8-server-ose-4.22\]/{p=1} p" /etc/yum.repos.d/*.repo > /etc/yum.repos.d/okd.repo.tmp
      sed -i -e 's,\[rhel-9.8-server-ose-4.22\],\[rhel-9.8-server-ose-4.22-okd\],' /etc/yum.repos.d/okd.repo.tmp
-@@ -37,6 +39,12 @@ mkdir -p /var/opt
+@@ -33,10 +35,28 @@ fi
+ # https://github.com/CentOS/centos-bootc/issues/393
+ mkdir -p /var/opt
+ 
++# okd-c9s: libsemanage commits (RPM scriptlets such as semodule, and the
++# `semanage boolean` postprocess) atomically rename directories under
++# /etc/selinux/targeted. On overlay storage those directories live in lower
++# image layers, where rename(2) fails with EXDEV (or ENOTEMPTY after
++# libsemanage's copy fallback) unless the kernel has redirect_dir enabled.
++# Copy the store into this layer first so every rename stays within it.
++if [ -d /etc/selinux/targeted ]; then
++    cp -a /etc/selinux/targeted /etc/selinux/targeted.okd-c9s
++    rm -rf /etc/selinux/targeted
++    mv -T /etc/selinux/targeted.okd-c9s /etc/selinux/targeted
++fi
++
+ # this is where all the real work happens
  rpm-ostree experimental compose treefile-apply \
      --var "osversion=${ID}-${VERSION_ID}" /run/src/packages-openshift.yaml
  

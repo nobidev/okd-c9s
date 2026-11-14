@@ -61,7 +61,14 @@ unbuildable: either move the submodule forward, or build with
   other variants;
 * `build-node-image.sh`: the "ART repo for SCOS" hack only runs when an ART
   repo exists (otherwise it writes a section-less repo file that breaks dnf),
-  and an optional `/run/src/extra-rootfs` overlay is copied in.
+  and an optional `/run/src/extra-rootfs` overlay is copied in;
+* `build-node-image.sh`: `/etc/selinux/targeted` is copied into the build
+  layer before packages are installed. libsemanage commits (the
+  `openvswitch-selinux-extra-policy` scriptlet, then `semanage boolean`)
+  atomically rename `active`/`previous`/`tmp`; on overlay storage those
+  directories sit in lower layers and rename(2) fails with EXDEV, after which
+  libsemanage's copy fallback ends in `Directory not empty`. Seen on GitHub's
+  Ubuntu runners, reproduced locally with a plain overlay mount.
 
 `okd-el9-local` is a local repo generated from `rpms/okd-el9.lock` (exact NEVRA
 + sha256; `gpgcheck=0` because the Red Hat key is not part of CentOS Stream —
