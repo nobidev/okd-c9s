@@ -3,7 +3,7 @@
 The examples use the default image names (`make info` prints yours).
 
 ```bash
-RELEASE=ghcr.io/nobidev/okd-c9s/release:4.22.0-okd-scos.10-c9s
+RELEASE=ghcr.io/nobidev/okd-c9s/release:4.22.0-okd-scos.10-c9s   # or a 4.20 / 4.21 one
 ```
 
 ## 1. Make the images pullable
@@ -70,12 +70,4 @@ Use a CPU model that matches what the hosts provide (e.g. Proxmox
 
 ## 5. Upgrades
 
-The release is unsigned:
-
-```bash
-oc adm upgrade --allow-explicit-upgrade --force --to-image=<new c9s release>
-```
-
-Moving an existing OKD 4.19 (SCOS 9) cluster to this build requires walking
-4.20 and 4.21 as well; each needs its own c9s rebuild (`versions.env`).
-New installs are the tested path.
+See [upgrade.md](upgrade.md).

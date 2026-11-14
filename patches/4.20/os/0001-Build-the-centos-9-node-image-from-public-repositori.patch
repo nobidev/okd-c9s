@@ -1,0 +1,113 @@
+From c53c66d8a99e4cf6ebcff3df15f64787219b51a2 Mon Sep 17 00:00:00 2001
+From: okd-c9s <okd-c9s@localhost>
+Date: Sat, 14 Nov 2026 03:49:36 +0000
+Subject: [PATCH] Build the centos-9 node image from public repositories
+
+openshift/os 4.20 keeps a centos-9 variant, but it pulls cri-o & co. from
+the CentOS Cloud SIG (no okd-4.20 build for c9s) and openshift-* from a
+CI-only ART repo. For okd-c9s (OKD on x86-64-v2 hardware):
+
+- packages-openshift.yaml: centos-9 uses okd-el9-local (public el9
+  OpenShift RPMs, locked by checksum) and requests the kubelet image
+  credential provider RPMs only on other variants
+- build-node-image.sh: skip the ART okd.repo hack when no ART repo is
+  present, copy the SELinux policy store into the current layer so
+  libsemanage's atomic directory renames do not cross overlay layers,
+  and overlay /run/src/extra-rootfs if provided
+---
+ build-node-image.sh     | 22 +++++++++++++++++++++-
+ packages-openshift.yaml | 23 +++++++++++++++++------
+ 2 files changed, 38 insertions(+), 7 deletions(-)
+
+diff --git a/build-node-image.sh b/build-node-image.sh
+index 7f25148..1997f15 100755
+--- a/build-node-image.sh
++++ b/build-node-image.sh
+@@ -21,7 +21,9 @@ source /etc/os-release
+ 
+ # XXX: For SCOS, only allow certain packages to come from ART; everything else
+ # should come from CentOS. We should eventually sever this.
+-if [ $ID = centos ]; then
++# okd-c9s: only do this when an ART repo is actually present (OpenShift CI);
++# otherwise the generated okd.repo has no section header and breaks dnf.
++if [ $ID = centos ] && grep -qs '^\[rhel-9.6-server-ose-4.20\]' /etc/yum.repos.d/*.repo; then
+     # this says: "if the line starts with [.*], turn off printing. if the line starts with [our-repo], turn it on."
+     awk "/\[.*\]/{p=0} /\[rhel-9.6-server-ose-4.20\]/{p=1} p" /etc/yum.repos.d/*.repo > /etc/yum.repos.d/okd.repo.tmp
+     sed -i -e 's,\[rhel-9.6-server-ose-4.20\],\[rhel-9.6-server-ose-4.20-okd\],' /etc/yum.repos.d/okd.repo.tmp
+@@ -33,10 +35,28 @@ fi
+ # https://github.com/CentOS/centos-bootc/issues/393
+ mkdir -p /var/opt
+ 
++# okd-c9s: libsemanage commits (RPM scriptlets such as semodule, and the
++# `semanage boolean` postprocess) atomically rename directories under
++# /etc/selinux/targeted. On overlay storage those directories live in lower
++# image layers, where rename(2) fails with EXDEV (or ENOTEMPTY after
++# libsemanage's copy fallback) unless the kernel has redirect_dir enabled.
++# Copy the store into this layer first so every rename stays within it.
++if [ -d /etc/selinux/targeted ]; then
++    cp -a /etc/selinux/targeted /etc/selinux/targeted.okd-c9s
++    rm -rf /etc/selinux/targeted
++    mv -T /etc/selinux/targeted.okd-c9s /etc/selinux/targeted
++fi
++
+ # this is where all the real work happens
+ rpm-ostree experimental compose treefile-apply \
+     --var "osversion=${ID}-${VERSION_ID}" /run/src/packages-openshift.yaml
+ 
++# okd-c9s: overlay extra files that are not available as RPMs for this
++# variant (e.g. kubelet image credential provider plugins).
++if [ -d /run/src/extra-rootfs ]; then
++    cp -a --no-preserve=ownership /run/src/extra-rootfs/. /
++fi
++
+ # cleanup any repo files we injected
+ rm -f /etc/yum.repos.d/{ocp,git,okd}.repo
+ 
+diff --git a/packages-openshift.yaml b/packages-openshift.yaml
+index 4067f41..eefc051 100644
+--- a/packages-openshift.yaml
++++ b/packages-openshift.yaml
+@@ -38,9 +38,12 @@ conditional-include:
+         - c9s-baseos
+         - c9s-appstream
+         - c9s-sig-nfv
+-        - c9s-sig-cloud-okd
+-        # XXX: this shouldn't be here; see related XXX in build-node-image.sh
+-        - rhel-9.6-server-ose-4.20-okd
++        # okd-c9s: cri-o, cri-tools, conmon-rs, openshift-clients and
++        # openshift-kubelet come from the public el9 OpenShift RPM mirror,
++        # downloaded and checksum-verified into a local repo injected via the
++        # `yumrepos` secret. This replaces the CentOS Cloud SIG repo (no
++        # okd-4.20 build for c9s) and the CI-only ART repo.
++        - okd-el9-local
+   - if: osversion == "centos-10"
+     include:
+       repos:
+@@ -53,6 +56,17 @@ conditional-include:
+         # - rhel-10.1-server-ose-4.20-okd
+         - rhel-9.6-server-ose-4.20-okd
+ 
++  # okd-c9s: the kubelet image credential providers are not published as el9
++  # RPMs outside of OpenShift CI. For centos-9 they are copied verbatim (they
++  # are el9 Go binaries) from the upstream OKD node image instead; see
++  # build-node-image.sh (/run/src/extra-rootfs).
++  - if: osversion != "centos-9"
++    include:
++      packages:
++        - ose-aws-ecr-image-credential-provider
++        - ose-azure-acr-image-credential-provider
++        - ose-gcp-gcr-image-credential-provider
++
+ packages:
+   # The packages below are required by OpenShift/OKD
+   # but are not present in CentOS Stream and RHEL.
+@@ -62,9 +76,6 @@ packages:
+   # The packages below are present in CentOS Stream/RHEL,
+   # and depend on one or more of the above.
+   - NetworkManager-ovs
+-  - ose-aws-ecr-image-credential-provider
+-  - ose-azure-acr-image-credential-provider
+-  - ose-gcp-gcr-image-credential-provider
+ 
+ postprocess:
+   # This is part of e.g. fedora-repos in Fedora; we now want to include it by default

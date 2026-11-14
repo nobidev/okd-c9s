@@ -3,14 +3,38 @@
 	url = https://github.com/coreos/rhel-coreos-config
 	branch = main
 [submodule "upstream/os"]
-	path = upstream/os
+	path = upstream/4.22/os
 	url = https://github.com/openshift/os
 	branch = release-4.22
 [submodule "upstream/driver-toolkit"]
-	path = upstream/driver-toolkit
+	path = upstream/4.22/driver-toolkit
 	url = https://github.com/openshift/driver-toolkit
 	branch = release-4.22
 [submodule "upstream/machine-os-images"]
-	path = upstream/machine-os-images
+	path = upstream/4.22/machine-os-images
 	url = https://github.com/openshift/machine-os-images
 	branch = release-4.22
+[submodule "upstream/4.20/os"]
+	path = upstream/4.20/os
+	url = https://github.com/openshift/os
+	branch = release-4.20
+[submodule "upstream/4.20/driver-toolkit"]
+	path = upstream/4.20/driver-toolkit
+	url = https://github.com/openshift/driver-toolkit
+	branch = release-4.20
+[submodule "upstream/4.20/machine-os-images"]
+	path = upstream/4.20/machine-os-images
+	url = https://github.com/openshift/machine-os-images
+	branch = release-4.20
+[submodule "upstream/4.21/os"]
+	path = upstream/4.21/os
+	url = https://github.com/openshift/os
+	branch = release-4.21
+[submodule "upstream/4.21/driver-toolkit"]
+	path = upstream/4.21/driver-toolkit
+	url = https://github.com/openshift/driver-toolkit
+	branch = release-4.21
+[submodule "upstream/4.21/machine-os-images"]
+	path = upstream/4.21/machine-os-images
+	url = https://github.com/openshift/machine-os-images
+	branch = release-4.21

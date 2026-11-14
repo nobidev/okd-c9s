@@ -1,0 +1,110 @@
+# Upgrading an OKD 4.19 cluster on x86-64-v2 hardware
+
+Upstream OKD 4.20+ cannot run on x86-64-v2 CPUs, so a 4.19 cluster on such
+hardware has to move through the rebuilt releases of this repository:
+
+```
+4.19.0-okd-scos.19  (upstream, SCOS 9)
+  -> 4.20.0-okd-scos.17-c9s
+  -> 4.21.0-okd-scos.11-c9s
+  -> 4.22.0-okd-scos.10-c9s
+```
+
+One minor at a time: skipping a minor skips API/storage migrations and is
+not supported by OKD. Every hop is a regular `ClusterVersion` upgrade; the
+nodes stay on SCOS 9 and are rebased by the MCO to the new node image.
+
+> **Test the path on a lab cluster first.** OKD 4.20–4.22 on SCOS 9 is not a
+> combination upstream tests (see [design.md](design.md#known-limitations-and-risks)).
+> There is no downgrade: the only way back is an etcd restore.
+
+## 0. Before the first hop
+
+1. Be on the newest 4.19 build, `4.19.0-okd-scos.19` (an upstream, signed
+   release that still runs SCOS 9). It is the release upstream 4.20.0-okd-scos.17
+   lists as a valid source.
+2. Stop the cluster from following upstream recommendations (they point at
+   SCOS 10 releases):
+
+   ```bash
+   oc patch clusterversion version --type merge -p '{"spec":{"channel":""}}'
+   ```
+
+3. Make the images pullable by every node: either make the
+   `ghcr.io/nobidev/okd-c9s/*` packages public, or merge a `ghcr.io` entry into
+   the global pull secret:
+
+   ```bash
+   oc get secret/pull-secret -n openshift-config \
+     -o jsonpath='{.data.\.dockerconfigjson}' | base64 -d > pull-secret.json
+   # add "ghcr.io": {"auth": "<base64 user:token>"} under .auths, then:
+   oc set data secret/pull-secret -n openshift-config \
+     --from-file=.dockerconfigjson=pull-secret.json
+   ```
+
+   Disconnected clusters: mirror each release with
+   `oc adm release mirror --from=<release@digest> --to=<registry>/okd-c9s`
+   and apply the printed `ImageDigestMirrorSet`.
+
+## 1. For every hop
+
+```bash
+TARGET=ghcr.io/nobidev/okd-c9s/release:4.20.0-okd-scos.17-c9s   # then 4.21…, 4.22…
+
+# a) Health: everything Available, nothing Degraded, all pools updated
+oc get clusterversion
+oc get clusteroperators
+oc get machineconfigpools
+
+# b) Gates that `--force` would silently skip
+oc adm upgrade                                   # Upgradeable=False reasons
+oc -n openshift-config-managed get cm admin-gates -o yaml
+#    acknowledge only gates you have checked, e.g. removed APIs:
+oc get apirequestcounts -o jsonpath='{range .items[?(@.status.removedInRelease!="")]}{.status.removedInRelease}{"\t"}{.metadata.name}{"\n"}{end}'
+oc -n openshift-config patch cm admin-acks --type merge -p '{"data":{"<gate-key>":"true"}}'
+
+# c) etcd backup (keep it off-cluster)
+oc debug node/<control-plane-node> -- chroot /host \
+  /usr/local/bin/cluster-backup.sh /home/core/assets/backup
+
+# d) Upgrade by digest. The release is not signed by OKD and not in the
+#    upgrade graph, hence --allow-explicit-upgrade and --force.
+DIGEST=$(oc image info "$TARGET" -o json | jq -r .digest)
+oc adm upgrade --allow-explicit-upgrade --force \
+  --to-image="${TARGET%:*}@${DIGEST}"
+
+# e) Watch until the version is Completed and every pool is updated
+oc adm upgrade
+oc get clusterversion -w
+oc get machineconfigpools -w
+oc get nodes -o wide          # OS-IMAGE: CentOS Stream CoreOS 9.0
+```
+
+The CI job summary of a publishing run also prints the release digest
+(`build/<minor>/release.env` locally).
+
+`--force` skips signature verification **and** the CVO's precondition checks,
+which is why step (b) has to be done by hand.
+
+## 2. After each hop
+
+```bash
+oc get clusteroperators                      # all Available=True, Degraded=False
+oc debug node/<node> -- chroot /host sh -c 'cat /etc/os-release; rpm-ostree status'
+oc -n openshift-machine-config-operator get cm coreos-bootimages \
+  -o jsonpath='{.data.stream}' | jq -r .stream   # c9s
+```
+
+New machines (scale-up, replacements) must boot from SCOS 9 media; see
+[install.md](install.md#3-boot-images).
+
+## If something goes wrong
+
+* A pod crash-looping with `Fatal glibc error: CPU does not support x86-64-v3`
+  or `This program can only be run on ... v3 microarchitecture` means a payload
+  image is still EL10: run `make verify-payload RELEASE_IMAGE=<release>` and
+  add the component to the rebuild list.
+* A stuck node update: `oc -n openshift-machine-config-operator logs
+  ds/machine-config-daemon -c machine-config-daemon --since=1h` on the node's pod.
+* Recovery from a failed control plane is an etcd restore from the backup taken
+  in step (c) (OKD docs: "Restoring to a previous cluster state").

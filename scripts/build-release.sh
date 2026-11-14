@@ -1,26 +1,29 @@
 #!/bin/bash
 # Assemble the release payload: the upstream OKD release with the EL10
-# components replaced by the c9s rebuilds. Everything else (188 of 191
-# images in 4.22.0-okd-scos.10) is reused by digest: those images are
-# already built on CentOS Stream 9.
+# components (REPLACED_COMPONENTS) swapped for the c9s rebuilds. Every other
+# image is reused by digest; those are already built on CentOS Stream 9.
 source "$(dirname "$0")/lib.sh"
 
-digests="${BUILD_DIR}/digests.env"
+digests="${WORK_DIR}/digests.env"
 [[ -s "${digests}" ]] || die "missing ${digests}; run 'make push' first"
-# shellcheck disable=SC1090
-source "${digests}"
+
+mappings=()
+for component in "${REPLACED_COMPONENTS[@]}"; do
+    ref="$(awk -F= -v c="${component}" '$1 == c { print $2 }' "${digests}")"
+    [[ -n "${ref}" ]] || die "no digest for ${component} in ${digests}"
+    mappings+=("${component}=${ref}")
+done
 
 log "creating ${RELEASE_IMAGE} (${RELEASE_NAME}) from ${UPSTREAM_RELEASE_IMAGE}"
+printf '  %s\n' "${mappings[@]}" >&2
 oc_cmd adm release new \
     --from-release="${UPSTREAM_RELEASE_IMAGE}" \
     --to-image="${RELEASE_IMAGE}" \
     --name="${RELEASE_NAME}" \
-    "stream-coreos=${NODE_REF}" \
-    "stream-coreos-extensions=${EXTENSIONS_REF}" \
-    "driver-toolkit=${DTK_REF}" \
-    "machine-os-images=${MOS_REF}" \
-    "installer=${INSTALLER_REF}" \
-    "installer-artifacts=${INSTALLER_ARTIFACTS_REF}"
+    "${mappings[@]}"
 
 oc_cmd adm release info "${RELEASE_IMAGE}" | head -20
-log "release image: ${RELEASE_IMAGE}"
+digest="$(oc_cmd image info -o json "${RELEASE_IMAGE}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["digest"])')"
+printf 'RELEASE_IMAGE=%s\nRELEASE_DIGEST_REF=%s@%s\n' "${RELEASE_IMAGE}" "${RELEASE_IMAGE%:*}" "${digest}" \
+    | tee "${WORK_DIR}/release.env"
+log "release image: ${RELEASE_IMAGE%:*}@${digest}"

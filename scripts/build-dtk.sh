@@ -19,10 +19,10 @@ prepare_src driver-toolkit
 log "building ${DTK_IMAGE}"
 # --from replaces the CI-only registry.ci.openshift.org/ocp/<ver>:base-rhel9.
 # TAGS=scos rewrites the manifests to reference stream-coreos.
-"${PODMAN}" build "${BUILD_DIR}/src/driver-toolkit" \
+"${PODMAN}" build "${SRC_DIR}/driver-toolkit" \
     --from "${DTK_BASE_IMAGE}" \
     --build-arg "KERNEL_VERSION=${kernel}" \
     --build-arg "RT_KERNEL_VERSION=${kernel}" \
     --build-arg "TAGS=scos" \
-    --label "io.openshift.build.commit.id=$(git -C "${ROOT_DIR}/upstream/driver-toolkit" rev-parse HEAD)" \
+    --label "io.openshift.build.commit.id=$(upstream_commit driver-toolkit)" \
     -t "${DTK_IMAGE}"

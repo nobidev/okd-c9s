@@ -10,7 +10,7 @@ fi
 
 "${ROOT_DIR}/scripts/fetch-bootimages.sh" --iso
 
-ctx="${BUILD_DIR}/ctx/machine-os-images"
+ctx="${WORK_DIR}/ctx/machine-os-images"
 rm -rf "${ctx}"
 mkdir -p "${ctx}/coreos" "${ctx}/bin" "${ctx}/bin-extra"
 cp "${ROOT_DIR}/images/machine-os-images/Containerfile" "${ctx}/"
@@ -18,7 +18,7 @@ ln "${BUILD_DIR}/bootimages/coreos-x86_64.iso" "${ctx}/coreos/coreos-x86_64.iso"
     || cp "${BUILD_DIR}/bootimages/coreos-x86_64.iso" "${ctx}/coreos/"
 cp "${BUILD_DIR}/bootimages/coreos-x86_64.iso.sha256" "${ctx}/coreos/"
 cp "${BUILD_DIR}/bootimages/stream.json" "${ctx}/coreos/coreos-stream.json"
-cp "${ROOT_DIR}/upstream/machine-os-images/scripts/"* "${ctx}/bin/"
+cp "${ROOT_DIR}/upstream/${OKD_MINOR}/machine-os-images/scripts/"* "${ctx}/bin/"
 
 # coreos-installer is not shipped in CentOS Stream 9; reuse the el9 binary
 # from the upstream image (ISA-checked below).
@@ -32,6 +32,6 @@ log "building ${MOS_IMAGE}"
 "${PODMAN}" build "${ctx}" \
     --build-arg "BASE_IMAGE=${C9S_BASE_IMAGE}" \
     --build-arg "OC_IMAGE=${OC_IMAGE}" \
-    --label "io.openshift.build.commit.id=$(git -C "${ROOT_DIR}/upstream/machine-os-images" rev-parse HEAD)" \
+    --label "io.openshift.build.commit.id=$(upstream_commit machine-os-images)" \
     --label "io.openshift.build.versions=machine-os=${SCOS9_BOOTIMAGE_BUILD}" \
     -t "${MOS_IMAGE}"

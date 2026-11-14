@@ -9,7 +9,7 @@ source "$(dirname "$0")/lib.sh"
 
 dest="${1:?usage: $0 <overlay-rootfs-dir>}"
 plugin_dir=/usr/libexec/kubelet-image-credential-provider-plugins
-cache="${BUILD_DIR}/cache/cred-providers"
+cache="${BUILD_DIR}/cache/cred-providers-${OKD_MINOR}"
 
 if [[ ! -d "${cache}${plugin_dir}" ]] || [[ -z "$(ls -A "${cache}${plugin_dir}" 2>/dev/null)" ]]; then
     upstream_node="$(upstream_image_for stream-coreos)"

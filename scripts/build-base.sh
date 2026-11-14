@@ -9,7 +9,7 @@ if have_local_image "${BASE_IMAGE}"; then
 fi
 
 prepare_src rhel-coreos-config
-src="${BUILD_DIR}/src/rhel-coreos-config"
+src="${SRC_DIR}/rhel-coreos-config"
 args_file="build-args-${SCOS_VARIANT}.conf"
 [[ -f "${src}/${args_file}" ]] || die "${args_file} not found in rhel-coreos-config"
 
