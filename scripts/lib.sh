@@ -111,6 +111,23 @@ prepare_src() {
     rm -rf "${dst}/.git"
 }
 
+# rpm-ostree postprocess scripts (e.g. `semanage boolean`) rename directories
+# that live in lower image layers (/etc/selinux/targeted/active). Kernel
+# overlayfs only allows that with redirect_dir enabled; otherwise rename(2)
+# fails with EXDEV and libsemanage aborts. containers/storage detects the
+# setting and switches to its naive layer diff, so enabling it is safe.
+ensure_overlay_redirect_dir() {
+    local param=/sys/module/overlay/parameters/redirect_dir
+    [[ -f "${param}" ]] || return 0
+    case "$(cat "${param}")" in
+        Y|y|on|follow) return 0 ;;
+    esac
+    log "enabling overlayfs redirect_dir (${param})"
+    if ! echo Y > "${param}" 2>/dev/null; then
+        die "overlayfs redirect_dir is disabled and cannot be enabled from here; run as root on the host: echo Y > ${param}"
+    fi
+}
+
 # Fail early when the image already exists locally and FORCE is not set.
 have_local_image() {
     [[ "${FORCE:-0}" != 1 ]] && "${PODMAN}" image exists "$1"

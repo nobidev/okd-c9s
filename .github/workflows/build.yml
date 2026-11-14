@@ -60,6 +60,13 @@ jobs:
           sudo chown "$(id -u):$(id -g)" /mnt/build
           df -h / /mnt
 
+      # See ensure_overlay_redirect_dir in scripts/lib.sh: rpm-ostree
+      # postprocess scripts rename lower-layer directories.
+      - name: Enable overlayfs redirect_dir
+        run: |
+          sudo modprobe overlay
+          echo Y | sudo tee /sys/module/overlay/parameters/redirect_dir
+
       - name: Restore download cache
         uses: actions/cache@v4
         with:

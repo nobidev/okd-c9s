@@ -23,6 +23,7 @@ sed -e "s|^IMAGE_FROM=.*|IMAGE_FROM=${BASE_IMAGE}|" \
     -e "s|^STREAM_CLASS=.*|STREAM_CLASS=${STREAM_CLASS}|" \
     "${src}/build-args-${OKD_MINOR}-c9s.conf" > "${args_file}"
 
+ensure_overlay_redirect_dir
 log "building ${NODE_IMAGE}"
 # Invocation documented in openshift/os docs/building.md.
 "${PODMAN}" build "${src}" \
