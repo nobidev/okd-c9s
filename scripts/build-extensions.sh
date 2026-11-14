@@ -8,6 +8,7 @@ if have_local_image "${EXTENSIONS_IMAGE}"; then
     exit 0
 fi
 "${PODMAN}" image exists "${NODE_IMAGE}" || die "run 'make node' first"
+node_id="$(local_image_id "${NODE_IMAGE}")"
 
 [[ -d "${SRC_DIR}/os" ]] || prepare_src os
 src="${SRC_DIR}/os"
@@ -21,8 +22,8 @@ log "building ${EXTENSIONS_IMAGE}"
 # --from replaces the first stage's base (an ARG in 4.22, a CI-only image
 # before), i.e. the c9s node image whose package set the extensions match.
 "${PODMAN}" build "${src}" -f "${containerfile}" "${PULL_LOCAL[@]}" \
-    --from "${NODE_IMAGE}" \
-    --build-arg "IMAGE_FROM=${NODE_IMAGE}" \
+    --from "${node_id}" \
+    --build-arg "IMAGE_FROM=${node_id}" \
     --build-arg "STREAM_CLASS=${STREAM_CLASS}" \
     --secret "id=yumrepos,src=${empty_repo}" \
     --security-opt label=disable \

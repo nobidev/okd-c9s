@@ -46,15 +46,20 @@ RCC_COMMIT="$(git -C "${ROOT_DIR}/upstream/rhel-coreos-config" rev-parse --short
 read -r -a REPLACED_COMPONENTS <<< "stream-coreos stream-coreos-extensions driver-toolkit machine-os-images ${BOOTIMAGES_COMPONENTS}"
 component_image() { echo "${REGISTRY}/$1:${OKD_VERSION}"; }
 
-# Images built here are pushed under the same tags they are built with. With a
-# pull policy other than "missing" (podman's containers.conf may set
-# "always"/"newer"), `FROM`/`--from`/`run` would fetch the previously
-# *published* image and silently replace the fresh local build. Every command
-# that consumes a locally built image therefore pins the policy:
-#   PULL_LOCAL: use local images, pull only external bases (centos, ubi, ...)
-#   NO_PULL:    the image must come from local storage
+# Images built here are pushed under the same tags they are built with. When
+# a build stage (or `podman run`) names such an image by tag, podman may pull
+# the previously *published* one and silently replace the fresh local build —
+# observed in CI even with --pull=missing. Locally built images are therefore
+# always referenced by image ID (local_image_id), which cannot be pulled, and
+# builds use --pull=missing so only external bases (centos, ubi, ...) are
+# fetched.
 PULL_LOCAL=(--pull=missing)
-NO_PULL=(--pull=never)
+
+# ID of a locally built image (fails if it is not in local storage).
+local_image_id() {
+    "${PODMAN}" image inspect --format '{{.Id}}' "$1" 2>/dev/null \
+        || die "image $1 is not in local storage"
+}
 
 # Image references produced by this repository.
 BASE_IMAGE="${BASE_IMAGE:-${REGISTRY}/scos-base:9-${RCC_COMMIT}}"

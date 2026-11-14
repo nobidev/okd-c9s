@@ -8,7 +8,7 @@ if have_local_image "${DTK_IMAGE}"; then
 fi
 "${PODMAN}" image exists "${NODE_IMAGE}" || die "run 'make node' first"
 
-kernel="$("${PODMAN}" run --rm "${NO_PULL[@]}" --entrypoint rpm "${NODE_IMAGE}" -q --qf '%{VERSION}-%{RELEASE}.%{ARCH}' kernel-core)"
+kernel="$("${PODMAN}" run --rm --entrypoint rpm "$(local_image_id "${NODE_IMAGE}")" -q --qf '%{VERSION}-%{RELEASE}.%{ARCH}' kernel-core)"
 log "node kernel: ${kernel}"
 
 log "building ${DTK_BASE_IMAGE}"
@@ -20,7 +20,7 @@ log "building ${DTK_IMAGE}"
 # --from replaces the CI-only registry.ci.openshift.org/ocp/<ver>:base-rhel9.
 # TAGS=scos rewrites the manifests to reference stream-coreos.
 "${PODMAN}" build "${SRC_DIR}/driver-toolkit" "${PULL_LOCAL[@]}" \
-    --from "${DTK_BASE_IMAGE}" \
+    --from "$(local_image_id "${DTK_BASE_IMAGE}")" \
     --build-arg "KERNEL_VERSION=${kernel}" \
     --build-arg "RT_KERNEL_VERSION=${kernel}" \
     --build-arg "TAGS=scos" \

@@ -19,11 +19,14 @@ if [[ "${WITH_CRED_PROVIDERS}" == 1 ]]; then
 fi
 
 # 4.22+ Containerfiles take the base via a build-args file (added for c9s by
-# patches/4.22/os); older ones hard-code FROM. --from covers both.
-build_args=(--from "${BASE_IMAGE}")
+# patches/4.22/os); older ones hard-code FROM. --from covers both. The base is
+# referenced by image ID so the published tag can never replace it.
+base_id="$(local_image_id "${BASE_IMAGE}")"
+log "base ${BASE_IMAGE} = ${base_id:0:12}"
+build_args=(--from "${base_id}")
 if [[ -f "${src}/build-args-${OKD_MINOR}-c9s.conf" ]]; then
     args_file="${WORK_DIR}/build-args-node.conf"
-    sed -e "s|^IMAGE_FROM=.*|IMAGE_FROM=${BASE_IMAGE}|" \
+    sed -e "s|^IMAGE_FROM=.*|IMAGE_FROM=${base_id}|" \
         -e "s|^STREAM_CLASS=.*|STREAM_CLASS=${STREAM_CLASS}|" \
         "${src}/build-args-${OKD_MINOR}-c9s.conf" > "${args_file}"
     build_args+=(--build-arg-file "${args_file}")
