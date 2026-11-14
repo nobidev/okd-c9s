@@ -1,0 +1,9 @@
+# Stand-in for registry.ci.openshift.org/ocp/<ver>:base-rhel9 (not publicly
+# pullable) used as the driver-toolkit base. CentOS Stream 9 keeps the
+# x86-64-v2 baseline. driver-toolkit needs kernel-rt (RT), kabi-dw and
+# kernel-devel-matched (AppStream) and some build deps from CRB.
+ARG BASE_IMAGE=quay.io/centos/centos:stream9
+FROM ${BASE_IMAGE}
+RUN dnf -y install 'dnf-command(config-manager)' \
+    && dnf config-manager --set-enabled crb rt nfv \
+    && dnf clean all && rm -rf /var/cache/dnf/*

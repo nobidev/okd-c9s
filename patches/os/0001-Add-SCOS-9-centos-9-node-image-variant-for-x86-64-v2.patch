@@ -1,0 +1,214 @@
+From 0486980a790faa28aeff1ab2f5e1c6ad921e3efe Mon Sep 17 00:00:00 2001
+From: okd-c9s <okd-c9s@localhost>
+Date: Sat, 14 Nov 2026 01:07:10 +0000
+Subject: [PATCH] Add SCOS 9 (centos-9) node image variant for x86-64-v2
+ hardware
+
+OKD 4.20+ moved the node OS to CentOS Stream 10, which requires
+x86-64-v3. Re-add a CentOS Stream 9 variant:
+
+- c9s.repo with the CentOS Stream 9 base/SIG repos (also the *-mirror
+  names used by extensions/centos-9.yaml)
+- build-args-4.22-c9s.conf
+- packages-openshift.yaml: centos-9 repo set; install kubelet image
+  credential provider RPMs only on other variants
+- build-node-image.sh: skip the ART okd.repo hack when no ART repo is
+  present and overlay /run/src/extra-rootfs if provided
+---
+ build-args-4.22-c9s.conf | 11 ++++++
+ build-node-image.sh      | 10 ++++-
+ c9s.repo                 | 84 ++++++++++++++++++++++++++++++++++++++++
+ packages-openshift.yaml  | 29 +++++++++++---
+ 4 files changed, 127 insertions(+), 7 deletions(-)
+ create mode 100644 build-args-4.22-c9s.conf
+ create mode 100644 c9s.repo
+
+diff --git a/build-args-4.22-c9s.conf b/build-args-4.22-c9s.conf
+new file mode 100644
+index 0000000..35dc435
+--- /dev/null
++++ b/build-args-4.22-c9s.conf
+@@ -0,0 +1,11 @@
++# okd-c9s: SCOS 9 (CentOS Stream 9) node image for x86-64-v2 hardware.
++# IMAGE_FROM is the SCOS 9 base image built from coreos/rhel-coreos-config
++# (build-args-c9s.conf); the build scripts override it with the locally
++# built/pushed image.
++IMAGE_FROM=localhost/scos-base:9
++
++# The OKD 4.22 MCO only knows a single SCOS stream, "centos-10", and uses it as
++# the default OSImageStream. Keep that name so the MCO selects this image.
++STREAM_CLASS=centos-10
++
++# SCOS/OKD: no labels.json or OCI labels for name/cpe
+diff --git a/build-node-image.sh b/build-node-image.sh
+index 00a6a61..a572763 100755
+--- a/build-node-image.sh
++++ b/build-node-image.sh
+@@ -21,7 +21,9 @@ source /etc/os-release
+ 
+ # XXX: For SCOS, only allow certain packages to come from ART; everything else
+ # should come from CentOS. We should eventually sever this.
+-if [ $ID = centos ]; then
++# okd-c9s: only do this when an ART repo is actually present (OpenShift CI);
++# otherwise the generated okd.repo has no section header and breaks dnf.
++if [ $ID = centos ] && grep -qs '^\[rhel-9.8-server-ose-4.22\]' /etc/yum.repos.d/*.repo; then
+     # this says: "if the line starts with [.*], turn off printing. if the line starts with [our-repo], turn it on."
+     awk "/\[.*\]/{p=0} /\[rhel-9.8-server-ose-4.22\]/{p=1} p" /etc/yum.repos.d/*.repo > /etc/yum.repos.d/okd.repo.tmp
+     sed -i -e 's,\[rhel-9.8-server-ose-4.22\],\[rhel-9.8-server-ose-4.22-okd\],' /etc/yum.repos.d/okd.repo.tmp
+@@ -37,6 +39,12 @@ mkdir -p /var/opt
+ rpm-ostree experimental compose treefile-apply \
+     --var "osversion=${ID}-${VERSION_ID}" /run/src/packages-openshift.yaml
+ 
++# okd-c9s: overlay extra files that are not available as RPMs for this
++# variant (e.g. kubelet image credential provider plugins).
++if [ -d /run/src/extra-rootfs ]; then
++    cp -a --no-preserve=ownership /run/src/extra-rootfs/. /
++fi
++
+ # cleanup any repo files we injected
+ rm -f /etc/yum.repos.d/{ocp,git,okd}.repo
+ 
+diff --git a/c9s.repo b/c9s.repo
+new file mode 100644
+index 0000000..ab12dc2
+--- /dev/null
++++ b/c9s.repo
+@@ -0,0 +1,84 @@
++# okd-c9s: CentOS Stream 9 repositories for the SCOS 9 node image and its
++# extensions. The *-mirror names are referenced by extensions/centos-9.yaml;
++# mirror.stream.centos.org keeps a few older builds, which is what
++# `match-base-evr` needs.
++
++[c9s-baseos]
++name=CentOS Stream 9 - BaseOS
++baseurl=https://mirror.stream.centos.org/9-stream/BaseOS/$basearch/os
++gpgcheck=1
++repo_gpgcheck=0
++enabled=1
++gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-centosofficial
++
++[c9s-appstream]
++name=CentOS Stream 9 - AppStream
++baseurl=https://mirror.stream.centos.org/9-stream/AppStream/$basearch/os
++gpgcheck=1
++repo_gpgcheck=0
++enabled=1
++gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-centosofficial
++
++[c9s-nfv]
++name=CentOS Stream 9 - NFV
++baseurl=https://mirror.stream.centos.org/9-stream/NFV/$basearch/os
++gpgcheck=1
++repo_gpgcheck=0
++enabled=1
++gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-centosofficial
++
++[c9s-rt]
++name=CentOS Stream 9 - RT
++baseurl=https://mirror.stream.centos.org/9-stream/RT/$basearch/os
++gpgcheck=1
++repo_gpgcheck=0
++enabled=1
++gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-centosofficial
++
++[c9s-baseos-mirror]
++name=CentOS Stream 9 - BaseOS (mirror)
++baseurl=https://mirror.stream.centos.org/9-stream/BaseOS/$basearch/os
++gpgcheck=1
++repo_gpgcheck=0
++enabled=1
++gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-centosofficial
++
++[c9s-appstream-mirror]
++name=CentOS Stream 9 - AppStream (mirror)
++baseurl=https://mirror.stream.centos.org/9-stream/AppStream/$basearch/os
++gpgcheck=1
++repo_gpgcheck=0
++enabled=1
++gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-centosofficial
++
++[c9s-nfv-mirror]
++name=CentOS Stream 9 - NFV (mirror)
++baseurl=https://mirror.stream.centos.org/9-stream/NFV/$basearch/os
++gpgcheck=1
++repo_gpgcheck=0
++enabled=1
++gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-centosofficial
++
++[c9s-rt-mirror]
++name=CentOS Stream 9 - RT (mirror)
++baseurl=https://mirror.stream.centos.org/9-stream/RT/$basearch/os
++gpgcheck=1
++repo_gpgcheck=0
++enabled=1
++gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-centosofficial
++
++[c9s-sig-nfv]
++name=CentOS Stream 9 - SIG NFV
++baseurl=https://mirror.stream.centos.org/SIGs/9-stream/nfv/$basearch/openvswitch-2/
++gpgcheck=1
++repo_gpgcheck=0
++enabled=1
++gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-SIG-NFV
++
++[c9s-sig-virtualization]
++name=CentOS Stream 9 - SIG Virtualization
++baseurl=https://mirror.stream.centos.org/SIGs/9-stream/virt/$basearch/kata-containers/
++gpgcheck=1
++repo_gpgcheck=0
++enabled=1
++gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-SIG-Virtualization
+diff --git a/packages-openshift.yaml b/packages-openshift.yaml
+index 908e633..20e543f 100644
+--- a/packages-openshift.yaml
++++ b/packages-openshift.yaml
+@@ -9,6 +9,7 @@ conditional-include:
+     - osversion != "rhel-9.8"
+     - osversion != "rhel-10.2"
+     - osversion != "centos-10"
++    - osversion != "centos-9"
+     include:
+       repos: [ENOEXIST] # We want an error in this case
+   - if: osversion == "rhel-9.8"
+@@ -38,6 +39,28 @@ conditional-include:
+         # XXX: using 9.8 repo for now until 10.2 plashets exist
+         # - rhel-10.2-server-ose-4.22-okd
+         - rhel-9.8-server-ose-4.22-okd
++  # okd-c9s: SCOS 9 (CentOS Stream 9, x86-64-v2 baseline) node image.
++  # cri-o, cri-tools, conmon-rs, openshift-clients and openshift-kubelet come
++  # from the public el9 OpenShift RPM mirror, downloaded and verified into a
++  # local repo (okd-el9-local) that is injected via the `yumrepos` secret.
++  - if: osversion == "centos-9"
++    include:
++      repos:
++        - c9s-baseos
++        - c9s-appstream
++        - c9s-sig-nfv
++        - okd-el9-local
++  # okd-c9s: the kubelet image credential providers are not published as el9
++  # RPMs outside of OpenShift CI. For centos-9 they are copied verbatim (they
++  # are static Go binaries) from the upstream OKD node image instead; see
++  # build-node-image.sh (/run/src/extra-rootfs).
++  - if: osversion != "centos-9"
++    include:
++      packages:
++        - ose-aws-ecr-image-credential-provider
++        - ose-azure-acr-image-credential-provider
++        - ose-gcp-gcr-image-credential-provider
++        - ose-crio-credential-provider
+ 
+ packages:
+   # The packages below are required by OpenShift/OKD
+@@ -45,12 +68,6 @@ packages:
+   - cri-o cri-tools conmon-rs
+   - openshift-clients openshift-kubelet
+   - openvswitch3.5
+-  # The packages below are present in CentOS Stream/RHEL,
+-  # and depend on one or more of the above.
+-  - ose-aws-ecr-image-credential-provider
+-  - ose-azure-acr-image-credential-provider
+-  - ose-gcp-gcr-image-credential-provider
+-  - ose-crio-credential-provider
+ 
+ postprocess:
+   # This is part of e.g. fedora-repos in Fedora; we now want to include it by default

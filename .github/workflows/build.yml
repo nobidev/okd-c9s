@@ -1,0 +1,126 @@
+name: build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths-ignore: ['**.md', 'docs/**']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Push images and assemble the release payload
+        type: boolean
+        default: false
+      scos_use_lockfile:
+        description: Pin SCOS 9 base packages to the rhel-coreos-config lockfile (0 = newest c9s packages)
+        type: choice
+        options: ['1', '0']
+        default: '1'
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install tools
+        run: sudo apt-get update -q && sudo apt-get install -y -q shellcheck
+      - name: Lint scripts and apply patches
+        run: make check
+
+  build:
+    needs: check
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.publish || startsWith(github.ref, 'refs/tags/v') }}
+      SCOS_USE_LOCKFILE: ${{ inputs.scos_use_lockfile || '1' }}
+      BUILDER_IMAGE: quay.io/podman/stable:v5.8.9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          sudo mkdir -p /mnt/containers /mnt/build
+          sudo chown "$(id -u):$(id -g)" /mnt/build
+          df -h / /mnt
+
+      - name: Restore download cache
+        uses: actions/cache@v4
+        with:
+          path: /mnt/build/cache
+          key: dl-${{ hashFiles('versions.env', 'rpms/okd-el9.lock') }}
+          restore-keys: dl-
+
+      # All builds run inside a privileged Fedora container with a current
+      # podman/buildah; container storage lives on the large /mnt disk.
+      - name: Start builder
+        run: |
+          docker run -d --name builder --privileged --device /dev/fuse \
+            -v "$PWD:$PWD" -v /mnt/build:/mnt/build -v /mnt/containers:/var/lib/containers \
+            -w "$PWD" -e BUILD_DIR=/mnt/build -e REGISTRY_AUTH_FILE=/root/auth.json \
+            -e REGISTRY="ghcr.io/${GITHUB_REPOSITORY,,}" -e SCOS_USE_LOCKFILE \
+            "$BUILDER_IMAGE" sleep infinity
+          docker exec builder dnf -q -y install make git-core python3 jq tar findutils \
+            createrepo_c qemu-user-static-x86
+          docker exec builder git config --global --add safe.directory '*'
+          docker exec builder podman version
+          docker exec builder make info
+
+      - name: Log in to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker exec -i builder \
+            podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build SCOS 9 base image
+        run: docker exec builder make base
+      - name: Build node image (stream-coreos)
+        run: docker exec builder make node
+      - name: Build extensions image
+        run: docker exec builder make extensions
+      - name: Build driver-toolkit
+        run: docker exec builder make dtk
+      - name: Build machine-os-images
+        run: docker exec builder make machine-os-images
+      - name: Build installer overlays
+        run: docker exec builder make installer
+
+      - name: Verify x86-64-v2 compatibility
+        run: docker exec builder make verify
+
+      - name: Push images
+        if: env.PUBLISH == 'true'
+        run: docker exec builder make push
+      - name: Assemble release payload
+        if: env.PUBLISH == 'true'
+        run: docker exec builder make release
+      - name: Verify release payload
+        if: env.PUBLISH == 'true'
+        run: docker exec builder make verify-payload
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '### okd-c9s'
+            echo '```'
+            docker exec builder make -s info || true
+            [ -f /mnt/build/digests.env ] && cat /mnt/build/digests.env || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          docker exec builder rm -f /root/auth.json || true

@@ -1,0 +1,5 @@
+# Thin overlay on the upstream installer / installer-artifacts image that only
+# replaces the coreos-bootimages ConfigMap (SCOS 10 -> SCOS 9 boot images).
+ARG UPSTREAM_IMAGE
+FROM ${UPSTREAM_IMAGE}
+COPY coreos-bootimages.yaml /manifests/coreos-bootimages.yaml

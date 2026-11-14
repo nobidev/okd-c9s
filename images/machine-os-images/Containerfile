@@ -1,0 +1,17 @@
+# Public-image equivalent of openshift/machine-os-images' Dockerfile
+# (which builds FROM CI-only registry.ci.openshift.org images), shipping the
+# SCOS 9 live ISO instead of the CentOS Stream 10 one.
+ARG OC_IMAGE
+ARG BASE_IMAGE=quay.io/centos/centos:stream9
+FROM ${OC_IMAGE} AS cli
+
+FROM ${BASE_IMAGE}
+RUN dnf install -y jq && dnf clean all && rm -rf /var/cache/*
+
+COPY bin-extra/coreos-installer /usr/bin/
+COPY --from=cli /usr/bin/oc /usr/bin/
+COPY coreos/ /coreos/
+COPY bin/ /bin/
+
+# Include this container in the release image payload
+LABEL io.openshift.release.operator=true
