@@ -37,7 +37,7 @@ verify_one() {
     local image="$1" rootfs ctr rc=0
     rootfs="$(mktemp -d "${BUILD_DIR}/verify.XXXXXX")"
     log "verify ${image}"
-    ctr="$("${PODMAN}" create --entrypoint /bin/true "${image}")"
+    ctr="$("${PODMAN}" create "${NO_PULL[@]}" --entrypoint /bin/true "${image}")"
     "${PODMAN}" export "${ctr}" | tar -x -C "${rootfs}" --exclude='dev/*' 2>/dev/null || true
     "${PODMAN}" rm -f "${ctr}" >/dev/null
 

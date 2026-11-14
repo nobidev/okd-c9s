@@ -46,6 +46,16 @@ RCC_COMMIT="$(git -C "${ROOT_DIR}/upstream/rhel-coreos-config" rev-parse --short
 read -r -a REPLACED_COMPONENTS <<< "stream-coreos stream-coreos-extensions driver-toolkit machine-os-images ${BOOTIMAGES_COMPONENTS}"
 component_image() { echo "${REGISTRY}/$1:${OKD_VERSION}"; }
 
+# Images built here are pushed under the same tags they are built with. With a
+# pull policy other than "missing" (podman's containers.conf may set
+# "always"/"newer"), `FROM`/`--from`/`run` would fetch the previously
+# *published* image and silently replace the fresh local build. Every command
+# that consumes a locally built image therefore pins the policy:
+#   PULL_LOCAL: use local images, pull only external bases (centos, ubi, ...)
+#   NO_PULL:    the image must come from local storage
+PULL_LOCAL=(--pull=missing)
+NO_PULL=(--pull=never)
+
 # Image references produced by this repository.
 BASE_IMAGE="${BASE_IMAGE:-${REGISTRY}/scos-base:9-${RCC_COMMIT}}"
 NODE_IMAGE="${NODE_IMAGE:-$(component_image stream-coreos)}"

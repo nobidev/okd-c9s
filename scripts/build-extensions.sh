@@ -20,7 +20,7 @@ empty_repo="${WORK_DIR}/empty.repo"
 log "building ${EXTENSIONS_IMAGE}"
 # --from replaces the first stage's base (an ARG in 4.22, a CI-only image
 # before), i.e. the c9s node image whose package set the extensions match.
-"${PODMAN}" build "${src}" -f "${containerfile}" \
+"${PODMAN}" build "${src}" -f "${containerfile}" "${PULL_LOCAL[@]}" \
     --from "${NODE_IMAGE}" \
     --build-arg "IMAGE_FROM=${NODE_IMAGE}" \
     --build-arg "STREAM_CLASS=${STREAM_CLASS}" \

@@ -32,10 +32,17 @@ fi
 ensure_overlay_redirect_dir
 log "building ${NODE_IMAGE}"
 # Invocation documented in openshift/os docs/building.md.
-"${PODMAN}" build "${src}" \
+"${PODMAN}" build "${src}" "${PULL_LOCAL[@]}" \
     "${build_args[@]}" \
     --secret "id=yumrepos,src=${WORK_DIR}/okd-el9.repo" \
     --security-opt label=disable \
     --label "org.opencontainers.image.source=https://github.com/openshift/os" \
     --label "io.openshift.build.commit.id=$(upstream_commit os)" \
     -t "${NODE_IMAGE}"
+
+# `oc adm release new` needs machine-os=<semver> (inherited from the base);
+# catching it here also detects a stale base image sneaking into the build.
+versions="$("${PODMAN}" image inspect --format '{{index .Labels "io.openshift.build.versions"}}' "${NODE_IMAGE}")"
+[[ "${versions}" =~ ^machine-os=[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] \
+    || die "${NODE_IMAGE} has io.openshift.build.versions='${versions}', expected machine-os=<semver>"
+log "${NODE_IMAGE}: ${versions}"
