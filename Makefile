@@ -85,7 +85,7 @@ print-upstream-commits: ## Show the source commits of the upstream components we
 
 check: ## Lint scripts and check that every minor's patches apply
 	shellcheck -x $(S)/*.sh
-	python3 -m py_compile $(S)/*.py
+	python3 -m py_compile $(S)/*.py upgrade.py
 	$(S)/check-patches.sh $(MINORS)
 
 clean: ## Remove build/ (keeps downloaded caches unless CLEAN_CACHE=1)

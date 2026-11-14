@@ -105,7 +105,9 @@ settings) or add a pull secret for `ghcr.io` to the cluster.
 
 ## Using the releases
 
-* Upgrading an existing OKD 4.19 cluster: [docs/upgrade.md](docs/upgrade.md).
+* Upgrading an existing OKD 4.19 cluster: `./upgrade.py 4.22 --dry-run`, then
+  `./upgrade.py 4.22` (one minor at a time, with checks and etcd backups);
+  details and the manual procedure in [docs/upgrade.md](docs/upgrade.md).
 * New installs: [docs/install.md](docs/install.md).
 
 ## Updating to newer upstream releases

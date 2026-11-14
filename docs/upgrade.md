@@ -18,6 +18,30 @@ nodes stay on SCOS 9 and are rebased by the MCO to the new node image.
 > combination upstream tests (see [design.md](design.md#known-limitations-and-risks)).
 > There is no downgrade: the only way back is an etcd restore.
 
+## Automated: `upgrade.py`
+
+[`upgrade.py`](../upgrade.py) (python3 + `oc`, run as cluster-admin) performs
+every step below, hop by hop, up to the requested minor:
+
+```bash
+./upgrade.py 4.22 --dry-run          # plan + pre-flight checks only, changes nothing
+./upgrade.py 4.22                    # asks before each hop
+./upgrade.py 4.22 --yes --ack <gate-key>   # unattended, acknowledging a reviewed admin gate
+```
+
+For each hop it waits for the cluster to settle, checks cluster operators,
+machine config pools, nodes, `Upgradeable`, admin gates (stops on any gate not
+passed with `--ack`) and removed-API usage for the target Kubernetes version,
+verifies that the target image really is the expected `-c9s` release, takes an
+etcd backup on a control-plane node, starts the upgrade by digest, waits for the
+ClusterVersion and the machine config pools, and checks that every node runs
+SCOS 9. Everything is logged to `upgrade-<timestamp>.log`. It can be re-run at
+any point: it starts from whatever version the cluster is on. `./upgrade.py -h`
+lists the options (`--skip-backup`, `--registry`, `--release-image`, timeouts).
+
+Step 0 (pull access, staying on 4.19.0-okd-scos.19 first) still applies; the
+script clears the update channel itself.
+
 ## 0. Before the first hop
 
 1. Be on the newest 4.19 build, `4.19.0-okd-scos.19` (an upstream, signed
@@ -46,7 +70,7 @@ nodes stay on SCOS 9 and are rebased by the MCO to the new node image.
    `oc adm release mirror --from=<release@digest> --to=<registry>/okd-c9s`
    and apply the printed `ImageDigestMirrorSet`.
 
-## 1. For every hop
+## 1. For every hop (manual equivalent of `upgrade.py`)
 
 ```bash
 TARGET=ghcr.io/nobidev/okd-c9s/release:4.20.0-okd-scos.17-c9s   # then 4.21…, 4.22…
