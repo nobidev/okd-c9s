@@ -33,5 +33,4 @@ log "building ${MOS_IMAGE}"
     --build-arg "BASE_IMAGE=${C9S_BASE_IMAGE}" \
     --build-arg "OC_IMAGE=${OC_IMAGE}" \
     --label "io.openshift.build.commit.id=$(upstream_commit machine-os-images)" \
-    --label "io.openshift.build.versions=machine-os=${SCOS9_BOOTIMAGE_BUILD}" \
     -t "${MOS_IMAGE}"

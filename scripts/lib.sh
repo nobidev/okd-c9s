@@ -29,6 +29,8 @@ load_env "${ROOT_DIR}/versions/${OKD_MINOR}.env"
 
 PODMAN="${PODMAN:-podman}"
 SCOS_USE_LOCKFILE="${SCOS_USE_LOCKFILE:-1}"
+# Build ID of the SCOS 9 base image (machine-os version), CoreOS style.
+SCOS_BUILD_VERSION="${SCOS_BUILD_VERSION:-9.0.$(date -u +%Y%m%d)-0}"
 WITH_CRED_PROVIDERS="${WITH_CRED_PROVIDERS:-1}"
 
 # Per-minor locations
