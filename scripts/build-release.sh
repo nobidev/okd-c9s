@@ -30,7 +30,9 @@ oc_cmd adm release new \
     --name="${RELEASE_NAME}" \
     "${mappings[@]}"
 
-oc_cmd adm release info "${RELEASE_IMAGE}" | head -20
+# sed reads all input (head would close the pipe and kill oc with SIGPIPE,
+# failing the script under pipefail after the release was already pushed).
+oc_cmd adm release info "${RELEASE_IMAGE}" | sed -n '1,25p'
 digest="$(oc_cmd image info -o json "${RELEASE_IMAGE}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["digest"])')"
 printf 'RELEASE_IMAGE=%s\nRELEASE_DIGEST_REF=%s@%s\n' "${RELEASE_IMAGE}" "${RELEASE_IMAGE%:*}" "${digest}" \
     | tee "${WORK_DIR}/release.env"
