@@ -1,4 +1,4 @@
-From c5b057cf5a997925763dfdfb29c8ceaf0387fb9f Mon Sep 17 00:00:00 2001
+From ca57192a5825111f8902aeb211dee98be0b30cdc Mon Sep 17 00:00:00 2001
 From: okd-c9s <okd-c9s@localhost>
 Date: Sat, 14 Nov 2026 01:07:10 +0000
 Subject: [PATCH] Add SCOS 9 (centos-9) node image variant for x86-64-v2
@@ -17,11 +17,11 @@ x86-64-v3. Re-add a CentOS Stream 9 variant:
   SELinux policy store into the current layer so libsemanage's atomic
   directory renames do not cross overlay layers
 ---
- build-args-4.22-c9s.conf | 11 ++++++
- build-node-image.sh      | 22 ++++++++++-
- c9s.repo                 | 84 ++++++++++++++++++++++++++++++++++++++++
- packages-openshift.yaml  | 29 +++++++++++---
- 4 files changed, 139 insertions(+), 7 deletions(-)
+ build-args-4.22-c9s.conf | 11 +++++
+ build-node-image.sh      | 22 +++++++++-
+ c9s.repo                 | 94 ++++++++++++++++++++++++++++++++++++++++
+ packages-openshift.yaml  | 29 ++++++++++---
+ 4 files changed, 149 insertions(+), 7 deletions(-)
  create mode 100644 build-args-4.22-c9s.conf
  create mode 100644 c9s.repo
 
@@ -88,10 +88,10 @@ index 00a6a61..02c7db4 100755
  
 diff --git a/c9s.repo b/c9s.repo
 new file mode 100644
-index 0000000..ab12dc2
+index 0000000..f611631
 --- /dev/null
 +++ b/c9s.repo
-@@ -0,0 +1,84 @@
+@@ -0,0 +1,94 @@
 +# okd-c9s: CentOS Stream 9 repositories for the SCOS 9 node image and its
 +# extensions. The *-mirror names are referenced by extensions/centos-9.yaml;
 +# mirror.stream.centos.org keeps a few older builds, which is what
@@ -160,6 +160,16 @@ index 0000000..ab12dc2
 +repo_gpgcheck=0
 +enabled=1
 +gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-centosofficial
++
++# Referenced by the SCOS 9 base treefile (rhel-coreos-config
++# manifest-c9s.yaml), which `rpm-ostree compose extensions` parses.
++[c9s-extras-common]
++name=CentOS Stream 9 - Extras packages
++baseurl=https://mirror.stream.centos.org/SIGs/9-stream/extras/$basearch/extras-common
++gpgcheck=1
++repo_gpgcheck=0
++enabled=1
++gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-SIG-Extras-SHA512
 +
 +[c9s-sig-nfv]
 +name=CentOS Stream 9 - SIG NFV
