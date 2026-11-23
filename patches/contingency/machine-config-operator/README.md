@@ -33,6 +33,16 @@ podman build -f Containerfile . \
 
 `Containerfile` overlays only `/usr/bin/machine-config-server` on the upstream
 MCO image (built with `TAGS=scos`, `GOAMD64=v2`, tests in `pkg/server` run
-first). To ship it, add `machine-config-operator` to the replaced components
-and to the release mappings, then re-run `make check-bootimages` with the
-newer boot image pinned.
+first). Adopting it takes two releases:
+
+1. Ship a release whose payload carries the patched MCO (add
+   `machine-config-operator` to the replaced components and the release
+   mappings) while keeping the current boot image pin.
+2. Only in a later release, raise `SCOS9_BOOTIMAGE_BUILD`. Clusters upgrade
+   from step 1, so their MCS already has the fallback when the new ISO arrives
+   (metal3 is updated before the MCO during an upgrade).
+
+`make check-bootimages` probes the *upstream* MCO of `UPSTREAM_RELEASE_IMAGE`
+and `UPGRADE_FROM_RELEASES`, so it would still reject the newer boot image:
+teach it to probe the patched MCO image instead (and list the step-1 release,
+not the upstream one, as the upgrade source) before step 2.

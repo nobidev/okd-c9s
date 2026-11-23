@@ -44,7 +44,7 @@ RELEASE_NAME="${RELEASE_NAME:-${OKD_VERSION}-${RELEASE_SUFFIX}}"
 RCC_COMMIT="$(git -C "${ROOT_DIR}/upstream/rhel-coreos-config" rev-parse --short=10 HEAD 2>/dev/null || echo unknown)"
 
 # Payload components replaced by this repository. Each is published as
-# ${REGISTRY}/<component>:${OKD_VERSION}.
+# ${REGISTRY}/<component>:${RELEASE_NAME}.
 read -r -a REPLACED_COMPONENTS <<< "stream-coreos stream-coreos-extensions driver-toolkit machine-os-images ${BOOTIMAGES_COMPONENTS}"
 # Tagged with the release name (not just OKD_VERSION) so a rebuild never
 # moves the tags of an already published release.

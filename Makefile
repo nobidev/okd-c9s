@@ -38,7 +38,7 @@ info: ## Print the resolved settings and image names for OKD_MINOR
 # Images
 # ---------------------------------------------------------------------------
 .PHONY: bootimages base node extensions dtk machine-os-images installer images
-bootimages: ## SCOS 9 boot image stream metadata -> build/bootimages/stream.json
+bootimages: ## SCOS 9 boot image stream metadata -> build/bootimages/<build>/stream.json
 	$(S)/fetch-bootimages.sh
 base: ## SCOS 9 base bootable container (coreos/rhel-coreos-config, c9s)
 	$(S)/build-base.sh

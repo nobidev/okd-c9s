@@ -105,6 +105,19 @@ def minor_of(version):
     return "%s.%s" % (m.group(1), m.group(2))
 
 
+C9S_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)-okd-scos\.(\d+)-c9s(?:\.(\d+))?$")
+
+
+def c9s_key(version):
+    """Sort key of an okd-c9s release name (None if it is not one).
+
+    4.20.0-okd-scos.17-c9s < 4.20.0-okd-scos.17-c9s.1 < 4.20.0-okd-scos.18-c9s"""
+    m = C9S_RE.match(version)
+    if not m:
+        return None
+    return tuple(int(g) for g in m.groups()[:4]) + (int(m.group(5) or 0),)
+
+
 def minor_key(minor):
     major, mnr = minor.split(".")
     return (int(major), int(mnr))
@@ -498,9 +511,13 @@ def main():
             die("upgrade to %s first (upstream, signed, still SCOS 9), or pass --allow-old-419"
                 % SUPPORTED_SOURCE_419)
     elif cur_minor in catalogue and current != catalogue[cur_minor]["name"]:
-        if not re.search(r"-c9s(\.\d+)?$", current):  # ...-c9s, ...-c9s.1, ...
+        cur_key, cat_key = c9s_key(current), c9s_key(catalogue[cur_minor]["name"])
+        if cur_key is None:
             die("the cluster runs %s, which is not an okd-c9s release; upstream OKD %s+ "
                 "cannot run on x86-64-v2 hardware" % (current, min(catalogue, key=minor_key)))
+        if cat_key is None or cur_key > cat_key:
+            die("the cluster runs %s, newer than this checkout's %s; update the repository"
+                % (current, catalogue[cur_minor]["name"]))
         log("cluster is on an older okd-c9s build of %s; it will move to %s"
             % (cur_minor, catalogue[cur_minor]["name"]), "WARN")
 

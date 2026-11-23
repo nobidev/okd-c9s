@@ -12,9 +12,20 @@ hardware has to move through the rebuilt releases of this repository:
 
 Clusters already on an earlier `-c9s` release (e.g. `4.20.0-okd-scos.17-c9s`)
 move to the `-c9s.1` build of the same minor first (`./upgrade.py 4.20` does
-that hop): the earlier boot image cannot add nodes on 4.20/4.21. On bare metal,
-power off hosts that were inspected or deprovisioned before that hop (fast
-track keeps them on the old deploy ISO) or re-inspect them before scaling up.
+that hop): the earlier boot image cannot add nodes on 4.20/4.21. On bare metal:
+
+* Hosts that already failed to join (console in the emergency shell,
+  `ignition-fetch` logs "400" / the MCS logs "unsupported Ignition version in
+  Accept header ... version=3.6.0") keep the old OS on disk. After the hop,
+  provision them again: delete their Machine (`oc -n openshift-machine-api
+  annotate machine <m> machine.openshift.io/delete-machine=true` and scale the
+  MachineSet down, or `oc delete machine <m>` to let it be recreated), wait
+  until the BareMetalHost is `available`, then scale up.
+* Power off hosts that were inspected or deprovisioned before the hop (fast
+  track keeps them on the old deploy ISO), or re-inspect them
+  (`oc annotate bmh <h> inspect.metal3.io=`), before scaling up.
+* Check on the new node: `journalctl -b -u ignition-fetch.service` shows
+  `version=3.5.0` and HTTP 200.
 
 One minor at a time: skipping a minor skips API/storage migrations and is
 not supported by OKD. Every hop is a regular `ClusterVersion` upgrade; the

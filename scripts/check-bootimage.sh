@@ -38,8 +38,8 @@ fetch "${url}/meta.json" -o "${work}/meta.json" || die "cannot fetch ${url}/meta
 fetch "${url}/commitmeta.json" -o "${work}/commitmeta.json" || die "cannot fetch ${url}/commitmeta.json"
 missing=0
 for image in "${REQUIRED_IMAGES[@]}"; do
-    path="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["images"].get(sys.argv[2], {}).get("path", ""))' \
-        "${work}/meta.json" "${image}")"
+    path="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("images", {}).get(sys.argv[2], {}).get("path", ""))' \
+        "${work}/meta.json" "${image}")" || die "cannot parse ${url}/meta.json"
     if [[ -z "${path}" ]]; then
         echo "  missing  ${image} (not in meta.json)"; missing=1; continue
     fi
@@ -59,7 +59,7 @@ git -C "${work}" init -q ignition
 git -C "${work}/ignition" fetch -q --depth 1 https://github.com/coreos/ignition "refs/tags/v${ign_version}" \
     || die "cannot fetch coreos/ignition tag v${ign_version}"
 accept="$(git -C "${work}/ignition" show FETCH_HEAD:internal/resource/url.go \
-    | grep -oE 'application/vnd\.coreos\.ignition\+json;version=[0-9]+\.[0-9]+\.[0-9]+, \*/\*;q=0\.1' | head -1)"
+    | { grep -oE 'application/vnd\.coreos\.ignition\+json;version=[0-9]+\.[0-9]+\.[0-9]+, \*/\*;q=0\.1' || true; } | head -1)"
 [[ -n "${accept}" ]] || die "no Accept literal in coreos/ignition v${ign_version} internal/resource/url.go; review the check"
 log "ignition ${ign_version} sends: Accept: ${accept}"
 
@@ -79,7 +79,8 @@ for release in "${releases[@]}"; do
         || die "cannot pull ${mco}"
     secure="$(free_port)"; insecure="$(free_port)"
     name="okd-c9s-mcs-check-$$-${insecure}"
-    "${PODMAN}" run -d --rm --name "${name}" --net=host \
+    # No --rm: if the MCS exits early its logs must still be readable below.
+    "${PODMAN}" run -d --name "${name}" --net=host \
         -v "${fixtures}:/ft:ro,z" -v "${work}:/tls:ro,z" \
         --entrypoint /usr/bin/machine-config-server "${mco}" \
         bootstrap --server-basedir /ft/bs --bootstrap-kubeconfig /ft/kubeconfig \
@@ -89,9 +90,10 @@ for release in "${releases[@]}"; do
     containers+=("${name}")
     code=000
     for _ in $(seq 1 60); do
-        code="$(curl -s -o "${work}/body" -w '%{http_code}' -H "Accept: ${accept}" \
+        code="$(curl -s --noproxy '*' -o "${work}/body" -w '%{http_code}' -H "Accept: ${accept}" \
             "http://127.0.0.1:${insecure}/config/master" || true)"
         [[ "${code}" != 000 ]] && break
+        [[ "$("${PODMAN}" container inspect -f '{{.State.Running}}' "${name}" 2>/dev/null)" == true ]] || break
         sleep 1
     done
     served="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["ignition"]["version"])' \
@@ -99,8 +101,8 @@ for release in "${releases[@]}"; do
     if [[ "${code}" == 200 && "${served}" != - ]]; then
         printf '  ok    %-48s HTTP %s, serves spec %s\n' "${release}" "${code}" "${served}"
     else
-        printf '  FAIL  %-48s HTTP %s (%s)\n' "${release}" "${code}" \
-            "$("${PODMAN}" logs "${name}" 2>&1 | grep -iE 'unsupported|error|refusing' | tail -1)"
+        printf '  FAIL  %-48s HTTP %s\n' "${release}" "${code}"
+        "${PODMAN}" logs --tail 15 "${name}" 2>&1 | sed 's/^/          /'
         failed=1
     fi
     "${PODMAN}" rm -f "${name}" >/dev/null 2>&1 || true
