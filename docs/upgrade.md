@@ -5,10 +5,16 @@ hardware has to move through the rebuilt releases of this repository:
 
 ```
 4.19.0-okd-scos.19  (upstream, SCOS 9)
-  -> 4.20.0-okd-scos.17-c9s
-  -> 4.21.0-okd-scos.11-c9s
-  -> 4.22.0-okd-scos.10-c9s
+  -> 4.20.0-okd-scos.17-c9s.1
+  -> 4.21.0-okd-scos.11-c9s.1
+  -> 4.22.0-okd-scos.10-c9s.1
 ```
+
+Clusters already on an earlier `-c9s` release (e.g. `4.20.0-okd-scos.17-c9s`)
+move to the `-c9s.1` build of the same minor first (`./upgrade.py 4.20` does
+that hop): the earlier boot image cannot add nodes on 4.20/4.21. On bare metal,
+power off hosts that were inspected or deprovisioned before that hop (fast
+track keeps them on the old deploy ISO) or re-inspect them before scaling up.
 
 One minor at a time: skipping a minor skips API/storage migrations and is
 not supported by OKD. Every hop is a regular `ClusterVersion` upgrade; the
@@ -32,7 +38,7 @@ every step below, hop by hop, up to the requested minor:
 For each hop it waits for the cluster to settle, checks cluster operators,
 machine config pools, nodes, `Upgradeable`, admin gates (stops on any gate not
 passed with `--ack`) and removed-API usage for the target Kubernetes version,
-verifies that the target image really is the expected `-c9s` release, takes an
+verifies that the target image really is the expected `-c9s.N` release, takes an
 etcd backup on a control-plane node, starts the upgrade by digest, waits for the
 ClusterVersion and the machine config pools, and checks that every node runs
 SCOS 9. Everything is logged to `upgrade-<timestamp>.log`. It can be re-run at
@@ -73,7 +79,7 @@ script clears the update channel itself.
 ## 1. For every hop (manual equivalent of `upgrade.py`)
 
 ```bash
-TARGET=ghcr.io/nobidev/okd-c9s/release:4.20.0-okd-scos.17-c9s   # then 4.21…, 4.22…
+TARGET=ghcr.io/nobidev/okd-c9s/release:4.20.0-okd-scos.17-c9s.1   # then 4.21…, 4.22…
 
 # a) Health: everything Available, nothing Degraded, all pools updated
 oc get clusterversion

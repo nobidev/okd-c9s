@@ -16,11 +16,15 @@ The repository contains only **submodules, patches and build files**.
 
 | Minor | Upstream release | Rebuilt release (`ghcr.io/nobidev/okd-c9s/release:…`) |
 |---|---|---|
-| 4.20 | `quay.io/okd/scos-release:4.20.0-okd-scos.17` | `4.20.0-okd-scos.17-c9s` |
-| 4.21 | `quay.io/okd/scos-release:4.21.0-okd-scos.11` | `4.21.0-okd-scos.11-c9s` |
-| 4.22 | `quay.io/okd/scos-release:4.22.0-okd-scos.10` | `4.22.0-okd-scos.10-c9s` |
+| 4.20 | `quay.io/okd/scos-release:4.20.0-okd-scos.17` | `4.20.0-okd-scos.17-c9s.1` |
+| 4.21 | `quay.io/okd/scos-release:4.21.0-okd-scos.11` | `4.21.0-okd-scos.11-c9s.1` |
+| 4.22 | `quay.io/okd/scos-release:4.22.0-okd-scos.10` | `4.22.0-okd-scos.10-c9s.1` |
 
 Node OS for all three: SCOS 9 (CentOS Stream CoreOS 9, kernel 5.14.0-763.el9).
+Boot image for all three: SCOS 9 `9.0.20260324-0` (Ignition 2.25.1, requests
+config spec 3.5.0, see below). The earlier `-c9s` releases shipped
+`9.0.20261110-0`, whose Ignition 2.28 requests spec 3.6.0, which the 4.20/4.21
+machine-config-server rejects: new nodes could not join. Use `-c9s.1`.
 Settings: [`versions/`](versions).
 
 ## What gets rebuilt
@@ -95,7 +99,9 @@ Useful knobs (environment or `make VAR=value`):
 
 `.github/workflows/build.yml`:
 
-* pull requests: `make check` (shellcheck, python syntax, patches of every minor apply);
+* pull requests: `make check` (shellcheck, python syntax, patches of every minor apply)
+  and `make check-bootimages` (each minor's boot image against the real
+  machine-config-servers it will meet);
 * pushes to `main`: build + `make verify` for every minor in parallel, nothing is published;
 * `workflow_dispatch` (choose a minor or `all`, tick *publish*) or a `v*` tag:
   also `make push release verify-payload` to `ghcr.io/<owner>/okd-c9s`.
@@ -116,11 +122,18 @@ settings) or add a pull secret for `ghcr.io` to the cluster.
    `OC_IMAGE` (the release's `cli` image).
 2. `make print-upstream-commits OKD_MINOR=<minor>` and move
    `upstream/<minor>/{os,driver-toolkit,machine-os-images}` to those commits.
-   Move `upstream/rhel-coreos-config` to the commit of the newest SCOS 9 boot
-   image build and set `SCOS9_BOOTIMAGE_BUILD` in `versions/common.env`.
-3. `make rpms-lock OKD_MINOR=<minor>` (re-pins cri-o/kubelet/oc to the newest el9 builds).
-4. `make check`, rebase `patches/<minor>/` if needed, then build.
-5. Run `make verify-payload RELEASE_IMAGE=<upstream release>` first: if upstream
+   Move `upstream/rhel-coreos-config` forward as needed (node OS base).
+   If `OKD_VERSION` changed within the minor, add the previous upstream release
+   to `UPGRADE_FROM_RELEASES` in the same file.
+3. Boot image: `SCOS9_BOOTIMAGE_BUILD` is set per minor in `versions/<minor>.env`.
+   Its Ignition must request a config spec that the minor's machine-config-server,
+   and that of every release in `UPGRADE_FROM_RELEASES`, can serve:
+   `make check-bootimages` (needs network + podman; also a CI gate) runs those
+   servers and fails otherwise. 4.20/4.21 stay on Ignition <= 2.25.x boot images
+   (spec 3.5.0) unless `patches/contingency/machine-config-operator` is adopted.
+4. `make rpms-lock OKD_MINOR=<minor>` (re-pins cri-o/kubelet/oc to the newest el9 builds).
+5. `make check` and `make check-bootimages`, rebase `patches/<minor>/` if needed, then build.
+6. Run `make verify-payload RELEASE_IMAGE=<upstream release>` first: if upstream
    moved more images to EL10, they must be added to the rebuild list.
 
 A new minor needs `versions/<minor>.env`, `rpms/okd-el9-<minor>.lock`, the three

@@ -3,8 +3,8 @@
 # installer, `oc adm node-image` and metal3) with the SCOS 9 live ISO.
 source "$(dirname "$0")/lib.sh"
 
-if have_local_image "${MOS_IMAGE}"; then
-    log "${MOS_IMAGE} already built (FORCE=1 to rebuild)"
+if have_local_image_labeled "${MOS_IMAGE}" "${BOOTIMAGE_LABEL}" "${SCOS9_BOOTIMAGE_BUILD}"; then
+    log "${MOS_IMAGE} already built with SCOS ${SCOS9_BOOTIMAGE_BUILD} (FORCE=1 to rebuild)"
     exit 0
 fi
 
@@ -14,10 +14,10 @@ ctx="${WORK_DIR}/ctx/machine-os-images"
 rm -rf "${ctx}"
 mkdir -p "${ctx}/coreos" "${ctx}/bin" "${ctx}/bin-extra"
 cp "${ROOT_DIR}/images/machine-os-images/Containerfile" "${ctx}/"
-ln "${BUILD_DIR}/bootimages/coreos-x86_64.iso" "${ctx}/coreos/coreos-x86_64.iso" 2>/dev/null \
-    || cp "${BUILD_DIR}/bootimages/coreos-x86_64.iso" "${ctx}/coreos/"
-cp "${BUILD_DIR}/bootimages/coreos-x86_64.iso.sha256" "${ctx}/coreos/"
-cp "${BUILD_DIR}/bootimages/stream.json" "${ctx}/coreos/coreos-stream.json"
+ln "${BOOTIMAGE_DIR}/coreos-x86_64.iso" "${ctx}/coreos/coreos-x86_64.iso" 2>/dev/null \
+    || cp "${BOOTIMAGE_DIR}/coreos-x86_64.iso" "${ctx}/coreos/"
+cp "${BOOTIMAGE_DIR}/coreos-x86_64.iso.sha256" "${ctx}/coreos/"
+cp "${BOOTIMAGE_DIR}/stream.json" "${ctx}/coreos/coreos-stream.json"
 cp "${ROOT_DIR}/upstream/${OKD_MINOR}/machine-os-images/scripts/"* "${ctx}/bin/"
 
 # coreos-installer is not shipped in CentOS Stream 9; reuse the el9 binary
@@ -33,4 +33,5 @@ log "building ${MOS_IMAGE}"
     --build-arg "BASE_IMAGE=${C9S_BASE_IMAGE}" \
     --build-arg "OC_IMAGE=${OC_IMAGE}" \
     --label "io.openshift.build.commit.id=$(upstream_commit machine-os-images)" \
+    --label "${BOOTIMAGE_LABEL}=${SCOS9_BOOTIMAGE_BUILD}" \
     -t "${MOS_IMAGE}"

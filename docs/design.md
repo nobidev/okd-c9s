@@ -47,9 +47,9 @@ rootfs passes.
 ### SCOS 9 base (`make base`)
 
 `coreos/rhel-coreos-config` built with `build-args-c9s.conf`, exactly as its
-`Containerfile` documents. The submodule is pinned to the commit used by the
-SCOS 9 boot image build in `versions/common.env`, so the boot image and the
-node image start from the same package set. All minors share this base.
+`Containerfile` documents. All minors share this base. It is independent
+from the boot image (see below): a node only runs the boot image until its first
+reboot into this node image.
 
 The lockfile pins exact NEVRAs. CentOS Stream mirrors only keep a few builds
 of each package (notably the kernel), so an old pin eventually becomes
@@ -114,6 +114,40 @@ the manifests to `stream-coreos` like upstream OKD does.
 
 ### Boot images, machine-os-images, installer overlay
 
+**Rule: a minor's boot image must run an Ignition whose config spec its
+machine-config-server can serve.** A new node's first boot runs the boot image's
+Ignition, which fetches `https://api-int:22623/config/<pool>` with
+`Accept: application/vnd.coreos.ignition+json;version=X.Y.Z, */*;q=0.1`
+(a literal in coreos/ignition `internal/resource/url.go`: 3.5.0 up to Ignition
+2.25.x, 3.6.0 from 2.26.0). The MCS of OKD 4.20 (`8af0c84e`) and 4.21
+(`1a0b9eee`) supports at most 3.5.0 and answers 400 to 3.6.0
+(`pkg/server/api.go` `detectSpecVersionFromAcceptHeader`); 4.22 (`90b26966`)
+falls back to 3.5.0 (upstream MCO-2182). Ignition does not retry a 400, so the
+node stops in the emergency shell. Upstream OKD keeps boot image and MCS paired
+per release; okd-c9s first shipped one newer boot image (`9.0.20261110-0`,
+Ignition 2.28) for every minor and broke 4.20/4.21 node joins.
+
+The pin is therefore per minor (`SCOS9_BOOTIMAGE_BUILD` in
+`versions/<minor>.env`), and must also suit the MCS of the releases a cluster
+is upgraded *from*: CVO rolls cluster-baremetal-operator (runlevel 31, metal3
+and the machine-os-images ISO) before the MCO (runlevel 80), so during an
+upgrade new hosts get the new ISO but the old MCS. `UPGRADE_FROM_RELEASES`
+lists those releases. `make check-bootimages` (`scripts/check-bootimage.sh`,
+CI job `bootimage-compat`, gating the build) checks the pinned build's
+artifacts, reads its Ignition version from `commitmeta.json`, takes the exact
+Accept literal from coreos/ignition at that tag, starts each relevant upstream
+MCS in `bootstrap` mode on `tests/mcs-bootstrap` and requires HTTP 200 with a
+config. With `9.0.20261110-0` pinned it reproduces the 400 of the field report.
+
+All three minors use `9.0.20260324-0`, the newest c9s build with Ignition
+2.25.1 (kernel 5.14.0-687.el9). An MCS backport that lifts the restriction for
+4.20/4.21 is kept, unapplied, in `patches/contingency/machine-config-operator/`.
+
+On bare metal (metal3, `install_coreos` without an image URL) the installed OS
+*is* the machine-os-images live ISO: IPA runs `coreos-installer --offline` from
+it. The `coreos-bootimages` ConfigMap matters for MachineSets with image URLs and
+the installer, not for that path.
+
 * `scripts/gen-stream-json.py` turns the SCOS 9 build's `meta.json` into
   CoreOS stream metadata (metal ISO/PXE/raw, qemu).
 * `machine-os-images` (agent installer, `oc adm node-image`, metal3 base ISO)
@@ -142,6 +176,7 @@ components. All other images stay byte-identical to upstream.
 
 | Risk | Impact | Mitigation |
 |---|---|---|
+| Boot images frozen at Ignition 2.25.x for 4.20/4.21 (kernel 5.14.0-687) | Hosts needing newer drivers during deploy/first boot could fail before the pivot to the node OS | `make check-bootimages` blocks unsafe bumps; MCS backport in `patches/contingency/` |
 | SCOS 9 + OKD 4.22 is not a combination upstream tests | Unknown regressions (MCO, networking, storage) | OCP 4.22 runs on EL9 (RHCOS 9.8); test on a lab cluster before production |
 | `streamclass=centos-10` label on an EL9 image (4.22) | Unused today (OSImageStream is off for SCOS); a later MCO could start relying on it | Re-check `pkg/osimagestream` when bumping |
 | el9 kubelet/cri-o/oc come from the rolling `<minor>-el9-beta` mirrors | Newer z-stream than the payload; the mirror deletes old builds | Same minor version (supported skew); `rpms/okd-el9-<minor>.lock` + CI cache; `make rpms-lock` to re-pin |

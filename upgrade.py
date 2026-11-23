@@ -498,7 +498,7 @@ def main():
             die("upgrade to %s first (upstream, signed, still SCOS 9), or pass --allow-old-419"
                 % SUPPORTED_SOURCE_419)
     elif cur_minor in catalogue and current != catalogue[cur_minor]["name"]:
-        if not current.endswith("-c9s"):
+        if not re.search(r"-c9s(\.\d+)?$", current):  # ...-c9s, ...-c9s.1, ...
             die("the cluster runs %s, which is not an okd-c9s release; upstream OKD %s+ "
                 "cannot run on x86-64-v2 hardware" % (current, min(catalogue, key=minor_key)))
         log("cluster is on an older okd-c9s build of %s; it will move to %s"

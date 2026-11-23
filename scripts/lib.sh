@@ -37,6 +37,8 @@ WITH_CRED_PROVIDERS="${WITH_CRED_PROVIDERS:-1}"
 SRC_DIR="${BUILD_DIR}/src/${OKD_MINOR}"
 WORK_DIR="${BUILD_DIR}/${OKD_MINOR}"
 RPM_LOCK="${ROOT_DIR}/rpms/okd-el9-${OKD_MINOR}.lock"
+# Boot image artifacts, kept per build so minors with different pins never mix.
+BOOTIMAGE_DIR="${BUILD_DIR}/bootimages/${SCOS9_BOOTIMAGE_BUILD}"
 
 RELEASE_NAME="${RELEASE_NAME:-${OKD_VERSION}-${RELEASE_SUFFIX}}"
 RCC_COMMIT="$(git -C "${ROOT_DIR}/upstream/rhel-coreos-config" rev-parse --short=10 HEAD 2>/dev/null || echo unknown)"
@@ -44,7 +46,9 @@ RCC_COMMIT="$(git -C "${ROOT_DIR}/upstream/rhel-coreos-config" rev-parse --short
 # Payload components replaced by this repository. Each is published as
 # ${REGISTRY}/<component>:${OKD_VERSION}.
 read -r -a REPLACED_COMPONENTS <<< "stream-coreos stream-coreos-extensions driver-toolkit machine-os-images ${BOOTIMAGES_COMPONENTS}"
-component_image() { echo "${REGISTRY}/$1:${OKD_VERSION}"; }
+# Tagged with the release name (not just OKD_VERSION) so a rebuild never
+# moves the tags of an already published release.
+component_image() { echo "${REGISTRY}/$1:${RELEASE_NAME}"; }
 
 # Images built here are pushed under the same tags they are built with. When
 # a build stage (or `podman run`) names such an image by tag, podman may pull
@@ -173,6 +177,20 @@ ensure_overlay_redirect_dir() {
 have_local_image() {
     [[ "${FORCE:-0}" != 1 ]] && "${PODMAN}" image exists "$1"
 }
+
+# Like have_local_image, but the image must also carry LABEL=VALUE (e.g. the
+# boot image build it was made from), so a changed pin forces a rebuild.
+have_local_image_labeled() {
+    local image="$1" label="$2" want="$3" got
+    have_local_image "${image}" || return 1
+    got="$("${PODMAN}" image inspect --format "{{index .Labels \"${label}\"}}" "${image}" 2>/dev/null || true)"
+    if [[ "${got}" != "${want}" ]]; then
+        log "${image} has ${label}='${got}', want '${want}': rebuilding"
+        return 1
+    fi
+}
+
+BOOTIMAGE_LABEL=io.okd-c9s.bootimage.build
 
 # Commit of a per-minor submodule, for image labels.
 upstream_commit() {

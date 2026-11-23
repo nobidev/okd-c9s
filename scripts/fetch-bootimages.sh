@@ -1,9 +1,9 @@
 #!/bin/bash
-# Produce SCOS 9 stream metadata (build/bootimages/stream.json) for
+# Produce SCOS 9 stream metadata (build/bootimages/<build>/stream.json) for
 # SCOS9_BOOTIMAGE_BUILD and, with --iso, download + verify its live ISO.
 source "$(dirname "$0")/lib.sh"
 
-out="${BUILD_DIR}/bootimages"
+out="${BOOTIMAGE_DIR}"
 url="${SCOS9_BOOTIMAGE_BASEURL}/${SCOS9_BOOTIMAGE_BUILD}/x86_64"
 mkdir -p "${out}"
 

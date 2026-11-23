@@ -73,7 +73,7 @@ all: images verify push release verify-payload ## Full pipeline for OKD_MINOR
 # ---------------------------------------------------------------------------
 # Maintenance
 # ---------------------------------------------------------------------------
-.PHONY: rpms-lock print-upstream-commits check clean
+.PHONY: rpms-lock print-upstream-commits check check-bootimages clean
 rpms-lock: ## Re-pin rpms/okd-el9-<minor>.lock to the newest el9 node RPMs
 	@source $(S)/lib.sh; python3 -I $(S)/rpms-lock.py generate "$$OKD_EL9_RPM_REPO" \
 	  cri-o cri-tools conmon-rs openshift-clients openshift-kubelet > "$$RPM_LOCK.tmp"; \
@@ -87,6 +87,9 @@ check: ## Lint scripts and check that every minor's patches apply
 	shellcheck -x $(S)/*.sh
 	python3 -m py_compile $(S)/*.py upgrade.py
 	$(S)/check-patches.sh $(MINORS)
+
+check-bootimages: ## Check each minor's boot image Ignition against its and its upgrade sources' MCS (needs network + podman)
+	@for m in $(MINORS); do OKD_MINOR=$$m $(S)/check-bootimage.sh || exit 1; done
 
 clean: ## Remove build/ (keeps downloaded caches unless CLEAN_CACHE=1)
 	@if [[ "$${CLEAN_CACHE:-0}" == 1 ]]; then rm -rf build; else \

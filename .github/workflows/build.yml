@@ -56,8 +56,23 @@ jobs:
           fi
           echo "minors=${minors}" | tee -a "$GITHUB_OUTPUT"
 
-  build:
+  # A node's first boot runs the boot image's Ignition against the cluster's
+  # machine-config-server; check that each minor's pinned boot image is served
+  # by its MCS and by the MCS of every release it is upgraded from.
+  bootimage-compat:
     needs: check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - name: Check boot images against machine-config-servers
+        run: |
+          podman version
+          make check-bootimages
+
+  build:
+    needs: [check, bootimage-compat]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 360

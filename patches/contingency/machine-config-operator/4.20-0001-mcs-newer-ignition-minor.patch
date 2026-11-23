@@ -1,0 +1,57 @@
+diff --git a/pkg/server/api.go b/pkg/server/api.go
+index 77b294b0..aba5d507 100644
+--- a/pkg/server/api.go
++++ b/pkg/server/api.go
+@@ -12,6 +12,7 @@ import (
+ 
+ 	"github.com/clarketm/json"
+ 	"github.com/coreos/go-semver/semver"
++	ign3types "github.com/coreos/ignition/v2/config/v3_5/types"
+ 	"k8s.io/klog/v2"
+ 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+ 	"sigs.k8s.io/controller-runtime/pkg/log"
+@@ -292,6 +293,13 @@ func detectSpecVersionFromAcceptHeader(acceptHeader string) (*semver.Version, er
+ 		}
+ 		version, err := ctrlcommon.IgnitionConverterSingleton().GetSupportedMinorVersion(*reqVersion)
+ 		if err != nil {
++			// Ignition is backwards compatible within a spec major version:
++			// a client asking for a newer minor than we support (e.g. spec
++			// 3.6.0 from Ignition 2.26+) can parse our newest spec, so serve
++			// that instead of failing. Backport of the 4.22 behaviour.
++			if reqVersion.Major == ign3types.MaxVersion.Major && reqVersion.Minor > ign3types.MaxVersion.Minor {
++				return &ign3types.MaxVersion, nil
++			}
+ 			return nil, fmt.Errorf("unsupported Ignition version in Accept header: %s", acceptHeader)
+ 		}
+ 		return &version, nil
+diff --git a/pkg/server/api_newer_minor_test.go b/pkg/server/api_newer_minor_test.go
+new file mode 100644
+index 00000000..5bb46554
+--- /dev/null
++++ b/pkg/server/api_newer_minor_test.go
+@@ -0,0 +1,25 @@
++package server
++
++import (
++	"testing"
++
++	"github.com/coreos/go-semver/semver"
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++)
++
++// Ignition 2.26+ requests spec 3.6.0; the server must fall back to its newest
++// spec 3 version instead of answering 400.
++func TestDetectSpecVersionNewerSpec3Minor(t *testing.T) {
++	for _, accept := range []string{
++		"application/vnd.coreos.ignition+json;version=3.6.0, */*;q=0.1",
++		"application/vnd.coreos.ignition+json;version=3.9.0, */*;q=0.1",
++	} {
++		version, err := detectSpecVersionFromAcceptHeader(accept)
++		require.NoError(t, err, accept)
++		assert.Equal(t, semver.New("3.5.0"), version, accept)
++	}
++
++	_, err := detectSpecVersionFromAcceptHeader("application/vnd.coreos.ignition+json;version=4.0.0, */*;q=0.1")
++	assert.Error(t, err)
++}

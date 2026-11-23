@@ -1,0 +1,26 @@
+# Overlay the upstream OKD machine-config-operator payload image with
+# machine-config-server rebuilt from patched source, using public images only.
+ARG UPSTREAM_IMAGE
+ARG GOLANG_IMAGE=mirror.gcr.io/library/golang:1.24.11
+ARG BUILDER_BASE=quay.io/centos/centos:stream9
+
+FROM ${GOLANG_IMAGE} AS golang
+
+FROM ${BUILDER_BASE} AS builder
+RUN dnf -y install gcc git-core make && dnf clean all
+COPY --from=golang /usr/local/go /usr/local/go
+ENV PATH=/usr/local/go/bin:/usr/sbin:/usr/bin GOPATH=/go GOTOOLCHAIN=local \
+    GOFLAGS=-mod=vendor CGO_ENABLED=1 GOAMD64=v2 \
+    GOCACHE=/go/.cache
+WORKDIR /go/src/github.com/openshift/machine-config-operator
+COPY src/ .
+ARG VERSION_OVERRIDE
+ARG SOURCE_GIT_COMMIT
+ARG RUN_TESTS=1
+RUN if [ "${RUN_TESTS}" = 1 ]; then go test -tags scos ./pkg/server/; fi && \
+    TAGS=scos WHAT=machine-config-server VERSION_OVERRIDE="${VERSION_OVERRIDE}" \
+    SOURCE_GIT_COMMIT="${SOURCE_GIT_COMMIT}" hack/build-go.sh && \
+    ./_output/linux/amd64/machine-config-server --help >/dev/null
+
+FROM ${UPSTREAM_IMAGE}
+COPY --from=builder /go/src/github.com/openshift/machine-config-operator/_output/linux/amd64/machine-config-server /usr/bin/machine-config-server
