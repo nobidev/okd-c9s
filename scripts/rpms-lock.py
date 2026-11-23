@@ -1,13 +1,18 @@
 #!/usr/bin/python3 -I
 """Generate or verify a lock file for RPMs taken from a plain yum repository.
 
-  rpms-lock.py generate REPO_URL PKG [PKG...] > rpms/okd-el9.lock
+  rpms-lock.py generate REPO_URL PKG [PKG...] > rpms/okd-el9-<minor>.lock
   rpms-lock.py fetch    LOCKFILE DESTDIR
+  rpms-lock.py check    LOCKFILE DESTDIR
+  rpms-lock.py adopt    LOCKFILE SRCDIR DESTDIR
 
 The lock file is tab separated: name, NEVRA, URL, sha256.
 `fetch` downloads every entry, verifies its sha256 and leaves the RPMs in
 DESTDIR (existing files with a matching checksum are reused, which makes
-the CI cache effective).
+the CI cache effective). `check` exits 0 only if DESTDIR already holds every
+locked RPM with the right checksum (nothing is downloaded). `adopt` moves
+locked RPMs from SRCDIR (e.g. an unpacked RPM bundle image) into DESTDIR; only
+regular files named in the lock whose sha256 matches are taken.
 """
 
 import gzip
@@ -125,11 +130,44 @@ def sha256_file(path):
     return h.hexdigest()
 
 
+def read_lock(lockfile):
+    with open(lockfile) as f:
+        return [l.rstrip("\n").split("\t") for l in f
+                if l.strip() and not l.startswith("#")]
+
+
+def check(lockfile, destdir):
+    missing = []
+    for _name, nevra, url, sha in read_lock(lockfile):
+        dest = os.path.join(destdir, os.path.basename(url))
+        if not (os.path.exists(dest) and sha256_file(dest) == sha):
+            missing.append(nevra)
+    for nevra in missing:
+        print(f"missing  {nevra}")
+    return 1 if missing else 0
+
+
+def adopt(lockfile, srcdir, destdir):
+    os.makedirs(destdir, exist_ok=True)
+    taken = 0
+    for _name, nevra, url, sha in read_lock(lockfile):
+        base = os.path.basename(url)
+        src, dest = os.path.join(srcdir, base), os.path.join(destdir, base)
+        if not os.path.islink(dest) and os.path.isfile(dest) and sha256_file(dest) == sha:
+            continue
+        if os.path.islink(src) or not os.path.isfile(src):
+            continue
+        if sha256_file(src) != sha:
+            print(f"ignored  {nevra} (sha256 mismatch in {srcdir})")
+            continue
+        os.replace(src, dest)
+        taken += 1
+    print(f"adopted  {taken} RPM(s) from {srcdir}")
+
+
 def fetch(lockfile, destdir):
     os.makedirs(destdir, exist_ok=True)
-    with open(lockfile) as f:
-        entries = [l.rstrip("\n").split("\t") for l in f
-                   if l.strip() and not l.startswith("#")]
+    entries = read_lock(lockfile)
     for name, nevra, url, sha in entries:
         dest = os.path.join(destdir, os.path.basename(url))
         if os.path.exists(dest) and sha256_file(dest) == sha:
@@ -137,6 +175,8 @@ def fetch(lockfile, destdir):
             continue
         print(f"download {nevra}")
         tmp = dest + ".part"
+        if os.path.lexists(tmp):
+            os.unlink(tmp)
         try:
             with urllib.request.urlopen(url, timeout=600) as resp, open(tmp, "wb") as out:
                 while True:
@@ -146,8 +186,9 @@ def fetch(lockfile, destdir):
                     out.write(chunk)
         except Exception as e:  # noqa: BLE001 - report and fail loudly
             sys.exit(f"error: cannot download {url}: {e}\n"
-                     "hint: the upstream mirror only keeps the newest builds; "
-                     "run `make rpms-lock` to re-pin, or restore the CI cache.")
+                     "hint: the upstream mirror only keeps the newest builds; make the "
+                     "el9-rpms bundle of this lock pullable (podman login, see README), "
+                     "restore the CI cache, or run `make rpms-lock` to re-pin.")
         got = sha256_file(tmp)
         if got != sha:
             os.unlink(tmp)
@@ -162,6 +203,10 @@ def fetch(lockfile, destdir):
 def main():
     if len(sys.argv) >= 4 and sys.argv[1] == "generate":
         generate(sys.argv[2], sys.argv[3:])
+    elif len(sys.argv) == 4 and sys.argv[1] == "check":
+        sys.exit(check(sys.argv[2], sys.argv[3]))
+    elif len(sys.argv) == 5 and sys.argv[1] == "adopt":
+        adopt(sys.argv[2], sys.argv[3], sys.argv[4])
     elif len(sys.argv) == 4 and sys.argv[1] == "fetch":
         fetch(sys.argv[2], sys.argv[3])
     else:

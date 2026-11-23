@@ -37,6 +37,13 @@ WITH_CRED_PROVIDERS="${WITH_CRED_PROVIDERS:-1}"
 SRC_DIR="${BUILD_DIR}/src/${OKD_MINOR}"
 WORK_DIR="${BUILD_DIR}/${OKD_MINOR}"
 RPM_LOCK="${ROOT_DIR}/rpms/okd-el9-${OKD_MINOR}.lock"
+RPM_CACHE_DIR="${BUILD_DIR}/cache/okd-el9-rpms-${OKD_MINOR}"
+# The upstream el9 mirror deletes superseded builds, so the locked RPMs are
+# also kept as an image (FROM scratch: /rpms/*.rpm + /okd-el9.lock), tagged by
+# the lock file's content: scripts/push-rpm-bundle.sh stores it,
+# scripts/fetch-rpms.sh restores from it before falling back to the mirror.
+rpm_lock_id="$( { sha256sum "${RPM_LOCK}" 2>/dev/null || echo nolock; } | cut -c1-16)"
+RPM_BUNDLE_IMAGE="${RPM_BUNDLE_IMAGE:-${REGISTRY}/el9-rpms:${OKD_MINOR}-${rpm_lock_id}}"
 # Boot image artifacts, kept per build so minors with different pins never mix.
 BOOTIMAGE_DIR="${BUILD_DIR}/bootimages/${SCOS9_BOOTIMAGE_BUILD}"
 
@@ -76,6 +83,28 @@ RELEASE_IMAGE="${RELEASE_IMAGE:-${REGISTRY}/release:${RELEASE_NAME}}"
 
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*" >&2; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+
+# Copy the locked RPMs out of RPM_BUNDLE_IMAGE into RPM_CACHE_DIR (pulling the
+# image if needed). Only regular files listed in the lock with a matching
+# sha256 are taken. Returns 1 if the image cannot be pulled. Arguments are
+# passed to `podman create` (e.g. --pull=always to ignore a local copy).
+restore_rpm_bundle() {
+    local tmp ctr
+    [[ -f "${RPM_LOCK}" ]] || die "no lock file ${RPM_LOCK} (make rpms-lock)"
+    mkdir -p "${RPM_CACHE_DIR}"
+    tmp="$(mktemp -d "${RPM_CACHE_DIR}.bundle.XXXXXX")"
+    if ! ctr="$("${PODMAN}" create "$@" "${RPM_BUNDLE_IMAGE}" /none 2>"${tmp}/err")"; then
+        log "cannot pull RPM bundle ${RPM_BUNDLE_IMAGE} (not published yet, or no pull access: podman login): $(tail -n 1 "${tmp}/err")"
+        rm -rf -- "${tmp:?}"
+        return 1
+    fi
+    log "restoring locked RPMs from ${RPM_BUNDLE_IMAGE}"
+    mkdir "${tmp}/rpms"
+    "${PODMAN}" cp "${ctr}:/rpms/." "${tmp}/rpms/" || log "warning: cannot copy RPMs out of ${RPM_BUNDLE_IMAGE}"
+    "${PODMAN}" rm -f "${ctr}" >/dev/null 2>&1 || true
+    python3 -I "${ROOT_DIR}/scripts/rpms-lock.py" adopt "${RPM_LOCK}" "${tmp}/rpms" "${RPM_CACHE_DIR}" >&2
+    rm -rf -- "${tmp:?}"
+}
 
 # Registry credentials shared by podman, skopeo and oc.
 if [[ -n "${REGISTRY_AUTH_FILE:-}" ]]; then

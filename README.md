@@ -102,12 +102,30 @@ Useful knobs (environment or `make VAR=value`):
 * pull requests: `make check` (shellcheck, python syntax, patches of every minor apply)
   and `make check-bootimages` (each minor's boot image against the real
   machine-config-servers it will meet);
-* pushes to `main`: build + `make verify` for every minor in parallel, nothing is published;
+* pushes to `main`: build + `make verify` for every minor in parallel; no release
+  images are published, only the `el9-rpms` bundles (see below);
 * `workflow_dispatch` (choose a minor or `all`, tick *publish*) or a `v*` tag:
   also `make push release verify-payload` to `ghcr.io/<owner>/okd-c9s`.
 
 GHCR packages are private when first created. Make them public (package
 settings) or add a pull secret for `ghcr.io` to the cluster.
+
+### Locked el9 RPMs (`el9-rpms` bundles)
+
+cri-o, kubelet and oc come from the `<minor>-el9-beta` mirror, which deletes
+superseded builds, so a lock file stops being buildable after a while. Every
+non-PR CI build therefore stores the locked set (best effort, before building) as
+`${REGISTRY}/el9-rpms:<minor>-<first 16 hex of the lock file's sha256>` (a
+`FROM scratch` image holding `/rpms/*.rpm` and `/okd-el9.lock`; skipped if the
+tag already exists). `make rpms-bundle` does the same by hand. Builds restore
+the RPMs from that image first and only fall back to the mirror for what is
+missing; every file is still checked against the sha256 in the lock file.
+Local builds need pull access to the `el9-rpms` package (public, or
+`podman login ghcr.io`); without it they log the miss and use the mirror.
+`RPM_BUNDLE_IMAGE` overrides the full image reference (keep one tag per minor
+and lock file). A bundle pushed by hand to GHCR first is linked to this
+repository through its `org.opencontainers.image.source` label; if CI cannot
+write to it, grant the repository access in the package's settings.
 
 ## Using the releases
 
@@ -131,7 +149,9 @@ settings) or add a pull secret for `ghcr.io` to the cluster.
    `make check-bootimages` (needs network + podman; also a CI gate) runs those
    servers and fails otherwise. 4.20/4.21 stay on Ignition <= 2.25.x boot images
    (spec 3.5.0) unless `patches/contingency/machine-config-operator` is adopted.
-4. `make rpms-lock OKD_MINOR=<minor>` (re-pins cri-o/kubelet/oc to the newest el9 builds).
+4. `make rpms-lock OKD_MINOR=<minor>` (re-pins cri-o/kubelet/oc to the newest el9 builds),
+   then `make rpms-bundle OKD_MINOR=<minor>` (or let the next CI build do it) to
+   store the new set in GHCR before the mirror deletes it.
 5. `make check` and `make check-bootimages`, rebase `patches/<minor>/` if needed, then build.
 6. Run `make verify-payload RELEASE_IMAGE=<upstream release>` first: if upstream
    moved more images to EL10, they must be added to the rebuild list.

@@ -73,11 +73,14 @@ all: images verify push release verify-payload ## Full pipeline for OKD_MINOR
 # ---------------------------------------------------------------------------
 # Maintenance
 # ---------------------------------------------------------------------------
-.PHONY: rpms-lock print-upstream-commits check check-bootimages clean
+.PHONY: rpms-lock rpms-bundle print-upstream-commits check check-bootimages clean
 rpms-lock: ## Re-pin rpms/okd-el9-<minor>.lock to the newest el9 node RPMs
 	@source $(S)/lib.sh; python3 -I $(S)/rpms-lock.py generate "$$OKD_EL9_RPM_REPO" \
 	  cri-o cri-tools conmon-rs openshift-clients openshift-kubelet > "$$RPM_LOCK.tmp"; \
 	  mv "$$RPM_LOCK.tmp" "$$RPM_LOCK"; cat "$$RPM_LOCK"
+
+rpms-bundle: ## Store the locked el9 RPMs as ${REGISTRY}/el9-rpms:<minor>-<lockhash> (restored by builds)
+	$(S)/push-rpm-bundle.sh
 
 print-upstream-commits: ## Show the source commits of the upstream components we rebuild
 	@source $(S)/lib.sh; oc_cmd adm release info --commits "$$UPSTREAM_RELEASE_IMAGE" \

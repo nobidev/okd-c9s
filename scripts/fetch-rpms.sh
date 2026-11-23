@@ -4,9 +4,17 @@
 source "$(dirname "$0")/lib.sh"
 
 lock="${RPM_LOCK}"
-cache="${BUILD_DIR}/cache/okd-el9-rpms-${OKD_MINOR}"
+cache="${RPM_CACHE_DIR}"
 repo="${SRC_DIR}/os/okd-el9-rpms"
 [[ -d "${SRC_DIR}/os" ]] || die "run prepare_src os first"
+[[ -f "${lock}" ]] || die "no lock file ${lock} (make rpms-lock)"
+
+# Restore the locked set from the RPM bundle image first: the upstream mirror
+# keeps only its newest builds. Anything still missing comes from the mirror;
+# either way every file is checked against the sha256 in the lock file.
+if ! python3 -I "${ROOT_DIR}/scripts/rpms-lock.py" check "${lock}" "${cache}" >/dev/null; then
+    restore_rpm_bundle --pull=missing || log "downloading the missing RPMs from ${OKD_EL9_RPM_REPO}"
+fi
 
 log "fetching RPMs from ${lock}"
 python3 -I "${ROOT_DIR}/scripts/rpms-lock.py" fetch "${lock}" "${cache}"

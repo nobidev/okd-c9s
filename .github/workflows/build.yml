@@ -123,7 +123,7 @@ jobs:
             -e REGISTRY="ghcr.io/${GITHUB_REPOSITORY,,}" -e SCOS_USE_LOCKFILE -e OKD_MINOR \
             "$BUILDER_IMAGE" sleep infinity
           docker exec builder dnf -q -y install make git-core python3 jq tar findutils \
-            createrepo_c qemu-user-static-x86
+            createrepo_c qemu-user-static-x86 skopeo
           docker exec builder git config --global --add safe.directory '*'
           docker exec builder podman version
           docker exec builder make info
@@ -132,6 +132,14 @@ jobs:
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker exec -i builder \
             podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      # Keeps the locked el9 RPMs available after the rolling upstream mirror
+      # deletes them. Runs first, on every non-PR build (not only when publishing),
+      # so the RPMs are captured even if a later step fails. Best effort: the
+      # build itself restores/downloads (and verifies) the RPMs on its own.
+      - name: Store locked RPMs (el9-rpms bundle)
+        continue-on-error: true
+        run: docker exec builder make rpms-bundle
 
       - name: Build SCOS 9 base image
         run: docker exec builder make base
