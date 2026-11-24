@@ -143,7 +143,8 @@ New machines (scale-up, replacements) must boot from SCOS 9 media; see
 
 * A pod crash-looping with `Fatal glibc error: CPU does not support x86-64-v3`
   or `This program can only be run on ... v3 microarchitecture` means a payload
-  image is still EL10: run `make verify-payload RELEASE_IMAGE=<release>` and
+  image is still EL10 or built for v3: run
+  `make verify-payload verify-payload-isa RELEASE_IMAGE=<release>` and
   add the component to the rebuild list.
 * A stuck node update: `oc -n openshift-machine-config-operator logs
   ds/machine-config-daemon -c machine-config-daemon --since=1h` on the node's pod.

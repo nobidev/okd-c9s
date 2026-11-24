@@ -123,7 +123,7 @@ jobs:
             -e REGISTRY="ghcr.io/${GITHUB_REPOSITORY,,}" -e SCOS_USE_LOCKFILE -e OKD_MINOR \
             "$BUILDER_IMAGE" sleep infinity
           docker exec builder dnf -q -y install make git-core python3 jq tar findutils \
-            createrepo_c qemu-user-static-x86 skopeo
+            createrepo_c qemu-user-static-x86 skopeo zstd
           docker exec builder git config --global --add safe.directory '*'
           docker exec builder podman version
           docker exec builder make info
@@ -166,6 +166,11 @@ jobs:
       - name: Verify release payload
         if: env.PUBLISH == 'true'
         run: docker exec builder make verify-payload
+      # Streams all ~190 images (~20 GB) and checks every ELF object, so an
+      # upstream image built for x86-64-v3 is caught even if its labels say EL9.
+      - name: Scan release payload for x86-64-v3 code
+        if: env.PUBLISH == 'true'
+        run: docker exec builder make verify-payload-isa
 
       - name: Summary
         if: always()

@@ -171,6 +171,14 @@ components. All other images stay byte-identical to upstream.
   (bash, python, systemd, rpm-ostree, kubelet, crio, oc, ovs-vswitchd, …)
   with `qemu-x86_64-static -cpu Nehalem`.
 * `scripts/verify-payload.sh`: label check of every image in the release.
+* `scripts/verify-payload-isa.sh` (`scripts/check-payload-isa.py`): the
+  `check-isa.py` rules applied to every layer of every image in the release,
+  streamed without writing to disk (layers shared between images are read
+  once; files deleted or replaced by an upper layer are not reported). This is
+  what covers the ~180 upstream images that are not rebuilt here. Limits: it is
+  a static check, so code compiled for v3 without an ISA note (e.g. hand-set
+  `-march`) is not detected; only the rebuilt images are also executed under
+  `qemu -cpu Nehalem`.
 
 ## Known limitations and risks
 
@@ -185,5 +193,5 @@ components. All other images stay byte-identical to upstream.
 | Credential providers copied as binaries | Not tracked by RPM | ISA-checked; disable with `WITH_CRED_PROVIDERS=0` if unused (bare metal) |
 | `openshift-install` keeps its embedded SCOS 10 stream | IPI on clouds/vSphere downloads SCOS 10 images | Override the OS image in `install-config.yaml` (docs/install.md) |
 | Release is not signed | `oc adm upgrade` needs `--allow-explicit-upgrade --force` | Expected for self-built payloads |
-| Upstream may move more images to EL10 in later 4.22.z | Pods crash on v2 | `make verify-payload` on the upstream release before bumping |
+| Upstream may move more images to EL10 in later 4.22.z | Pods crash on v2 | `make verify-payload verify-payload-isa` on the upstream release before bumping; both run on every publish |
 | OKD 5.x | Every image is EL10 | Out of scope for this approach |

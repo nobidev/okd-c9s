@@ -9,9 +9,7 @@ source "$(dirname "$0")/lib.sh"
 release="${1:-${RELEASE_IMAGE}}"
 mkdir -p "${WORK_DIR}"
 list="${WORK_DIR}/payload-$(echo "${release}" | tr '/:@' '___').txt"
-oc_cmd adm release info --pullspecs -o json "${release}" \
-    | python3 -c 'import json,sys; [print(t["name"], t["from"]["name"]) for t in json.load(sys.stdin)["references"]["spec"]["tags"]]' \
-    > "${list}"
+release_pullspecs "${release}" "${list}"
 log "checking $(wc -l < "${list}") images of ${release}"
 
 bad=0

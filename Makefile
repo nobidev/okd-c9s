@@ -57,7 +57,7 @@ images: node extensions dtk machine-os-images installer ## Build every replaced 
 # ---------------------------------------------------------------------------
 # Verification / publishing
 # ---------------------------------------------------------------------------
-.PHONY: verify push release verify-payload
+.PHONY: verify push release verify-payload verify-payload-isa
 verify: ## ISA scan + qemu (Nehalem) execution test of the rebuilt images
 	@source $(S)/lib.sh; $(S)/verify-image.sh "$$NODE_IMAGE" "$$DTK_IMAGE" "$$MOS_IMAGE"
 push: ## Push the rebuilt images, record digests in build/<minor>/digests.env
@@ -67,8 +67,11 @@ release: ## Assemble and push the release payload (needs `make push`)
 verify-payload: ## Check that no payload image is still EL10-based
 	$(S)/verify-payload.sh
 
+verify-payload-isa: ## Scan every layer of every payload image for code needing > x86-64-v2
+	$(S)/verify-payload-isa.sh
+
 .PHONY: all
-all: images verify push release verify-payload ## Full pipeline for OKD_MINOR
+all: images verify push release verify-payload verify-payload-isa ## Full pipeline for OKD_MINOR
 
 # ---------------------------------------------------------------------------
 # Maintenance

@@ -139,6 +139,14 @@ oc_cmd() {
         "${OC_IMAGE}" oc "$@" "${oc_args[@]}"
 }
 
+# Write "<name> <pullspec>" for every image of release payload $1 to file $2.
+release_pullspecs() {
+    oc_cmd adm release info --pullspecs -o json "$1" \
+        | python3 -c 'import json,sys; [print(t["name"], t["from"]["name"]) for t in json.load(sys.stdin)["references"]["spec"]["tags"]]' \
+        > "$2.tmp"
+    mv "$2.tmp" "$2"
+}
+
 # Pull spec of a component in the upstream release payload.
 upstream_image_for() {
     local name="$1"

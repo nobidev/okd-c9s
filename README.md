@@ -81,7 +81,8 @@ export OKD_MINOR=4.20
 make images                          # base, node, extensions, dtk, machine-os-images, installer
 make verify                          # ISA scan + run binaries on an emulated Nehalem CPU
 make push release                    # push components, assemble the release payload
-make verify-payload                  # no payload image may still be EL10
+make verify-payload                  # no payload image may still be EL10 (labels)
+make verify-payload-isa              # no payload image may contain x86-64-v3 code (all layers, ~20 GB)
 ```
 
 Useful knobs (environment or `make VAR=value`):
@@ -105,7 +106,7 @@ Useful knobs (environment or `make VAR=value`):
 * pushes to `main`: build + `make verify` for every minor in parallel; no release
   images are published, only the `el9-rpms` bundles (see below);
 * `workflow_dispatch` (choose a minor or `all`, tick *publish*) or a `v*` tag:
-  also `make push release verify-payload` to `ghcr.io/<owner>/okd-c9s`.
+  also `make push release verify-payload verify-payload-isa` to `ghcr.io/<owner>/okd-c9s`.
 
 GHCR packages are private when first created. Make them public (package
 settings) or add a pull secret for `ghcr.io` to the cluster.
@@ -153,8 +154,9 @@ write to it, grant the repository access in the package's settings.
    then `make rpms-bundle OKD_MINOR=<minor>` (or let the next CI build do it) to
    store the new set in GHCR before the mirror deletes it.
 5. `make check` and `make check-bootimages`, rebase `patches/<minor>/` if needed, then build.
-6. Run `make verify-payload RELEASE_IMAGE=<upstream release>` first: if upstream
-   moved more images to EL10, they must be added to the rebuild list.
+6. Run `make verify-payload verify-payload-isa RELEASE_IMAGE=<upstream release>`
+   first: if upstream moved more images to EL10 (or built one for x86-64-v3),
+   they must be added to the rebuild list.
 
 A new minor needs `versions/<minor>.env`, `rpms/okd-el9-<minor>.lock`, the three
 `upstream/<minor>/` submodules, `patches/<minor>/os` and a CI matrix entry.

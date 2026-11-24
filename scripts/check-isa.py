@@ -102,18 +102,22 @@ def isa_needed(f):
     return 0
 
 
-def goamd64_level(path, size):
-    """Return 'v3'/'v4' if a Go binary was built for that level, else None."""
-    if size > 1 << 30:
-        return None
-    with open(path, "rb") as f:
-        data = f.read()
+def go_level(data):
+    """Return 'v3'/'v4' if the ELF bytes are a Go binary built for that level."""
     if b"\xff Go buildinf:" not in data:
         return None
     for level in (b"v4", b"v3"):
         if b"\tGOAMD64=" + level + b"\n" in data:
             return level.decode()
     return None
+
+
+def goamd64_level(path, size):
+    """Return 'v3'/'v4' if a Go binary was built for that level, else None."""
+    if size > 1 << 30:
+        return None
+    with open(path, "rb") as f:
+        return go_level(f.read())
 
 
 def describe(mask):
