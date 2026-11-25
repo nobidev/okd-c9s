@@ -14,6 +14,16 @@ cluster on old hardware upgrading through 4.20 → 4.21 → 4.22
 
 The repository contains only **submodules, patches and build files**.
 
+> **Scope ends at 4.22.** There is no OKD 4.23 (OKD 5.0 follows 4.22), and the
+> OKD 5.x payloads are rebuilt on CentOS Stream 10: in `5.0.0-okd-scos.8`,
+> 192 of 196 images are c10s and the payload ISA scan flags tens of thousands
+> of x86-64-v3 objects, against 0 for the releases rebuilt here. Replacing
+> ~190 images is outside what this repository does, so it will not follow
+> OKD 5.x. Clusters with x86-64-v2 nodes stay on 4.22 (no further upstream
+> OKD 4.22 builds since `4.22.0-okd-scos.10`, 2026-09-09); moving on means
+> replacing those nodes with x86-64-v3 CPUs and returning to upstream OKD
+> (details in [docs/design.md](docs/design.md#end-of-scope-okd-5x)).
+
 | Minor | Upstream release | Rebuilt release (`ghcr.io/nobidev/okd-c9s/release:…`) |
 |---|---|---|
 | 4.20 | `quay.io/okd/scos-release:4.20.0-okd-scos.17` | `4.20.0-okd-scos.17-c9s.1` |

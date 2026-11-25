@@ -194,4 +194,33 @@ components. All other images stay byte-identical to upstream.
 | `openshift-install` keeps its embedded SCOS 10 stream | IPI on clouds/vSphere downloads SCOS 10 images | Override the OS image in `install-config.yaml` (docs/install.md) |
 | Release is not signed | `oc adm upgrade` needs `--allow-explicit-upgrade --force` | Expected for self-built payloads |
 | Upstream may move more images to EL10 in later 4.22.z | Pods crash on v2 | `make verify-payload verify-payload-isa` on the upstream release before bumping; both run on every publish |
-| OKD 5.x | Every image is EL10 | Out of scope for this approach |
+| No OKD release after 4.22 for x86-64-v2 | No upstream fixes (CVEs) after `4.22.0-okd-scos.10` | See [End of scope](#end-of-scope-okd-5x): plan to replace the v2 nodes |
+
+## End of scope: OKD 5.x
+
+Checked on 2026-11-25; this repository stops at 4.22.
+
+* **No OKD 4.23.** OCP 4.23 only exists as engineering candidates, with OKD
+  disabled in its build data; OKD 5.0 directly follows 4.22 (upstream graph
+  edge `4.22.0-okd-scos.10` -> `5.0.0-okd-scos.8`, channel `stable-scos-5`).
+* **The OKD 5.x payload is EL10.** `5.0.0-okd-scos.8`: 192 of 196 images on
+  CentOS Stream 10 (only the haproxy router images stay on c9s), and
+  `5.1.0-okd-scos.ec.6` looks the same. ocp-build-data builds OKD from the
+  `rhaos-5.x-rhel-10` branches. `scripts/check-payload-isa.py` on
+  `5.0.0-okd-scos.8` reports 73,676 objects (counted per image) that need
+  x86-64-v3, against 0 for the 4.20–4.22 releases rebuilt here. Every
+  container would fail on a v2 CPU, whatever the node OS.
+* **What would still work, and why it is not enough.** The node layer could be
+  ported as for 4.22: el9 RPMs exist (`5.0-el9-beta`, `5.1-el9-beta`),
+  `openshift/os` keeps a `rhel-9.8` variant, and the SCOS 9 base lives on in
+  `coreos/rhel-coreos-config`. But the payload would need ~190 images rebuilt
+  (from source on c9s, or rebased onto an x86-64-v2 EL10 such as AlmaLinux 10
+  `x86_64_v2`), for every z-stream. That is a distribution, not a set of
+  patches. Upstream also deprecates RHEL 9 nodes in OCP 5.0 and removes them
+  in 5.3, so the el9 RPMs are expected to stop after 5.2.
+* **Way forward for clusters built with these releases:** stay on 4.22 (no
+  further upstream OKD 4.22 builds after 2026-09-09, so no new fixes), and
+  replace the x86-64-v2 nodes with x86-64-v3 CPUs (Haswell or newer) to return
+  to upstream OKD 5.x. Moving from a `-c9s` 4.22 release to upstream 5.0
+  (nodes rebased from SCOS 9 to SCOS 10 by the MCO) has not been tested here:
+  try it on a lab cluster first.
